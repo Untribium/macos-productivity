@@ -1,0 +1,4 @@
+# Hammerspoon installs Spoons into ~/.hammerspoon/Spoons at runtime.
+# bootstrap.sh leaves that directory alone; it is not part of this repo.
+hammerspoon/Spoons/
+.DS_Store

@@ -1,0 +1,750 @@
+# macOS Window & Input Setup — Source of Truth
+
+> This file is the authoritative spec for the setup. Any chat that changes a
+> binding, a tool choice, or a layer boundary must produce a diff to this file.
+> If something isn't in here, it isn't decided.
+>
+> **This file now lives in the repo** (`macos-productivity/SETUP.md`) and is
+> mirrored into Claude project knowledge at the end of a session. The repo copy
+> wins; see §0. §10 embeds the live config for chats that cannot see the repo.
+
+**Status:** architecture decided; nav layer built and verified; repo scaffolded
+**Last updated:** 2026-09-01
+
+---
+
+## 0. Repo, workflow, and how a Cowork session works
+
+**Repo:** `~/Projects/claude/macos-productivity` — connected to Cowork sessions
+as a folder, and the only part of this machine a session can see.
+
+```
+macos-productivity/
+├── SETUP.md              # this file — source of truth, git-tracked
+├── README.md             # install + the manual GUI steps, for a new machine
+├── bootstrap.sh          # dry-run by default; links hammerspoon/ into ~/.hammerspoon
+├── hammerspoon/          # symlinked into ~/.hammerspoon (init.lua, config/, modules/)
+│   ├── init.lua          #   loader only
+│   ├── config/keymap.lua #   bindings as data — the file you edit
+│   └── modules/fnlayer.lua #  the fn tap
+└── docs/
+    └── verification/     # probe results and transcripts (dated, one file per probe)
+```
+
+**Install model: symlink, not copy.** `bootstrap.sh` symlinks the three entries
+this repo owns into `~/.hammerspoon`, leaving Hammerspoon's own `Spoons/` alone.
+After that, editing the repo edits the live config — no deploy step, no second
+writable copy to drift. Backs up whatever was there first, and shows a diff
+before doing it. `hammerspoon/Spoons/` is gitignored.
+
+**Consequence for auto-reload:** FSEvents does not see writes that land on a
+symlink's *target*, so a watcher on `hs.configdir` would silently stop firing
+after bootstrap. `init.lua` resolves its own symlink and watches the repo
+directory instead, falling back to `hs.configdir` when the config is a real
+directory. The load notification prints the directory being watched — that is
+the check. *(Unverified as of 2026-09-01: confirm a repo-side edit still
+triggers a reload.)*
+
+### What a Cowork session can and cannot touch
+
+| | |
+|---|---|
+| Sees | this repo folder, and only this folder |
+| Does **not** see | `~/.hammerspoon`, System Settings, `defaults`, the Hammerspoon console |
+| Can do | edit config, write docs, run shell commands **in a Linux VM**, git |
+| Cannot do | run `hs`, read the tap's behaviour, click System Settings, flash the Zeal60 |
+
+The shell a session gets is a **Linux VM with this folder mounted** — not macOS.
+So `defaults read`, `hs -c`, and anything CoreGraphics is out of reach; every
+such probe is a command the session writes down and the user runs, pasting the
+output back. This is why `docs/verification/` exists: it is where that output
+lands so the next session does not re-ask.
+
+**Session shape (default):**
+
+1. Session opens with the repo connected; reads `SETUP.md` from the repo.
+2. Work happens as edits to `hammerspoon/` and `docs/`.
+3. Anything needing macOS becomes a **probe**: a copy-pasteable command block,
+   run by the user, output filed in `docs/verification/`.
+4. Every decision lands as a §8 row and, if it is a binding, a §5 row **and** a
+   `keymap.lua` edit in the same commit.
+5. Session ends with a commit and a mirror of `SETUP.md` into project knowledge.
+
+**Mirror rule:** the repo copy is authoritative. Project knowledge is a
+read-only copy for chats that are not connected to the folder. If the two
+disagree, the repo is right and the mirror is stale — never merge the mirror
+back.
+
+---
+
+## 1. Goal & constraints
+
+**Goal:** keyboard-driven window management on macOS. Minimal mouse, no
+trackpad gestures for window/space operations, muscle memory that survives
+reboots and machine changes.
+
+**Hard constraints:**
+
+- [x] SIP: **cannot disable.** Corporate machine, no admin account.
+- [x] **No admin rights at all.** Confirmed: privileged-daemon approval in Login
+      Items & Extensions prompts for *username and password*, i.e. an admin
+      account the user does not have. No MDM configuration profile is present
+      (`profiles` empty, Privacy & Security → Profiles empty) — this is plain
+      authorization, not policy. Effect is the same.
+- [x] Displays: laptop + 2 externals. **Different external monitors at office
+      and at home** — config must not hardcode display identities.
+- [x] Keyboards: built-in + **Zeal60 rev3** (60%, QMK/VIA). No arrow keys on the
+      60% ⇒ a nav layer is a functional requirement, not a nicety.
+- [x] **Both keyboards must behave identically.** This is the constraint that
+      drove the layer 0 decision. Verified at the event level for caps/fn on
+      2026-08-30.
+- [x] Must survive: macOS updates, and be reproducible from a repo.
+- [x] Must not interfere with: terminal, IDE (vim user — Escape is load-bearing;
+      IntelliJ — `ctrl+space` is load-bearing).
+
+**Non-goals:**
+
+- Tiling. Not wanted. Prior AeroSpace trial was unsatisfying coming from Linux
+  tiling WMs — verdict was that a half-tiler is worse than no tiler.
+- Automatic layout / auto-placement of new windows.
+- Heavyweight launchers (Raycast, Alfred). Preference for scripting over
+  large opinionated tools.
+- Home-row mods. Ruled out — fights IDE bindings, and adaptation cost is not
+  justified by the goal.
+
+---
+
+## 2. Environment
+
+| Field | Value |
+|---|---|
+| macOS version | 26.6.2 (25G83) Tahoe |
+| Hardware | laptop + 2 externals (office set ≠ home set) |
+| Keyboards | built-in; Zeal60 rev3 (VIA, stock caps lock) |
+| Input sources | three layouts, cycled in one direction |
+| Admin rights | **none** |
+| Shell | *(fill in)* |
+| Dotfiles repo | `~/Projects/claude/macos-productivity` — this repo. Whether it merges into a larger dotfiles repo later is open; §0 assumes it stands alone. |
+
+---
+
+## 3. Layer ownership
+
+Each row is a layer in the input/window pipeline, ordered from lowest (closest
+to hardware) to highest. **Exactly one tool owns each layer.** Anything a chat
+proposes must state which layer it operates on.
+
+| # | Layer | Owner | Status |
+|---|---|---|---|
+| 0 | Key remapping (caps lock, per-device rules) | **macOS System Settings → Modifier Keys** | decided, **verified** |
+| 1 | Global hotkey capture | **Hammerspoon** (`hs.hotkey`, `hs.eventtap`) | decided, **nav layer built** |
+| 2 | Window move & resize | **Hammerspoon** (`hs.window`, `hs.screen`) | decided |
+| 3 | Space management | **native Spaces**, driven by Hammerspoon `hs.spaces` | decided, **partly unverified** |
+| 4 | App launching & switching | **Spotlight** + Hammerspoon direct-launch binds | decided |
+| 5 | Scripting & glue | **Hammerspoon** (same config) | decided |
+
+Layers 1, 2 and 5 collapse into a single Lua config. That is the point: one
+config tree, owned by the user, in the dotfiles repo.
+
+**Permissions required:** Hammerspoon needs Accessibility. No daemon, no driver,
+no admin. This is the entire reason the stack is shaped this way. *(Open: does
+the nav layer's event tap additionally require Input Monitoring? Verify and
+correct this line.)*
+
+### Why not the obvious candidates
+
+- **Karabiner-Elements** — ruled out. See decision log. Not a partial loss: with
+  the privileged daemon unapproved, Karabiner performs *no* remapping at all,
+  not even caps→Escape.
+- **yabai** — ruled out. Space operations need partial SIP disable.
+- **AeroSpace** — ruled out twice over: tiling is a non-goal, and a
+  deliberately-suppressed tiler is worse than no tiler.
+- **Rectangle / Loop** — would cover halves, but nothing else, and adds a tool
+  that owns a layer Hammerspoon already owns.
+- **QMK nav layer on the Zeal60** — ruled out. Would give the 60% a layer the
+  built-in keyboard lacks, i.e. two divergent definitions of the same thing.
+  Note this does *not* rule out firmware changes that make the two keyboards
+  converge — see the 2026-08-30 firmware decision.
+
+### Rules
+
+> A tool may only be introduced by claiming an unowned layer, or by displacing
+> the current owner of a layer (which requires updating this table).
+
+> **Exactly one event tap may watch the fn flag**, and it is `fnlayer.lua`. Two
+> taps on fn means nondeterministic ordering, double consumption, and competing
+> watchdogs. Any module wanting an fn binding registers it in `keymap.lua`; it
+> does not create a tap. Bindings that do not involve fn can use `hs.hotkey`,
+> which needs no tap at all.
+
+---
+
+## 4. Keybinding namespace
+
+### Layer 0: the caps lock key
+
+Caps Lock is remapped in **System Settings → Keyboard → Keyboard Shortcuts →
+Modifier Keys**. This pane has a **per-keyboard selector**: the mapping must be
+set once for the built-in keyboard and once for the Zeal60.
+
+Because the remap happens on the macOS side, the **Zeal60 sends a stock Caps
+Lock and needs no custom firmware.** Apple's Globe is a vendor-specific HID
+usage with no mainline QMK keycode and no VIA support, so firmware-side Globe
+was never an option — and is not needed.
+
+**Decided: Caps Lock → fn**
+
+Globe and fn are the same modifier (`kCGEventFlagMaskSecondaryFn`). The Modifier
+Keys pane labels the destination according to the selected keyboard: the Zeal60
+selector shows **fn**, the built-in shows **🌐 Globe**. There is no choice
+between them — pick whichever label the pane offers.
+
+- Leaves `ctrl` completely untouched — no clash with macOS emacs-style text
+  navigation (`^h` `^k` `^f` `^b` `^p` `^n`), no clash with readline in the
+  terminal, and no clash with IntelliJ completion on `^space`.
+- **Required setting:** Keyboard → "Press 🌐 key to" → **Do Nothing**. Without
+  this, a lone tap switches input source *and* the synthetic tap keycode that
+  Escape depends on is not emitted. Dictation has been folded into this same
+  menu on 26.6.2 and is covered by the same setting.
+  - This is what cost the built-in tap-to-switch-language. It is bought back
+    deliberately as `caps+space` — see §5.
+- Globe chord collisions (`A` Dock, `D` dictation, `F` fullscreen, `H` hide,
+  `N` notifications, `Q` Quick Note) are **resolved**: the session event tap
+  sees these before the system and suppresses them. Verified for `H` and `E`.
+- `hs.hotkey` does **not** accept fn as a modifier. The nav layer is therefore
+  built on `hs.eventtap` watching the fn flag. The Keyboard Shortcuts recorder
+  will not accept fn either — same limitation, and the reason `caps+space` has
+  to be translated by the tap rather than bound natively.
+
+**Fallback: Caps Lock → Control**
+
+Retained only in case fn handling regresses after a macOS update.
+
+- Costs `^h`/`^k` etc. globally, including in the terminal, which is the
+  expensive part.
+- macOS emacs bindings *can* be disabled per-user via
+  `~/Library/KeyBindings/DefaultKeyBinding.dict` (e.g. `"^h" = "noop:";`), but
+  this affects Cocoa text views only — not Electron, JetBrains, or terminals.
+  Mostly moot anyway, since a Hammerspoon binding shadows them.
+
+**Escape:** tap caps alone → Escape. macOS emits a synthetic keyDown of
+**keycode 179** when the Globe/fn modifier is pressed and released without being
+chorded. The tap watches for that keycode rather than running a timeout
+heuristic. Fires on release; vim reacts to the synthesized Escape's keydown, so
+the only latency is the finger.
+
+### Namespace reservations
+
+| Modifier combo | Reserved for | Notes |
+|---|---|---|
+| `caps` (=fn) + key | **nav layer** — arrows and cursor motion | the 60% has no arrow keys; this is the whole point |
+| `caps+shift` + key | nav layer with selection | falls out of modifier pass-through, no extra code |
+| `alt` + key | **unallocated** | a candidate for window ops, not a decision — see §7 |
+| `alt+shift` + key | **unallocated** | same |
+| `ctrl` + key | **do not take** | emacs bindings, readline, IDE |
+| `cmd` + key | **macOS / apps — do not take** | breaks app menus |
+| `hyper` (ctrl+alt+cmd+shift) | **private channel: tap → OS shortcuts** | not hand-reachable on either keyboard; used to address native shortcuts that the recorder will not let fn reach |
+| leader key sequences | not adopted | |
+
+**Convention:** *(to be fixed in the window chat, together with the choice of
+modifier itself — e.g. "plain = focus, +shift = move window, +ctrl = move to
+display")*
+
+**Reserved by macOS — never bind:** `cmd+tab`, `cmd+space`, `ctrl+↑`,
+`ctrl+←/→`, `cmd+shift+3/4/5`, `cmd+Q/W/H/M`. Check
+System Settings → Keyboard → Keyboard Shortcuts before claiming anything else.
+
+---
+
+## 5. Keymap
+
+The single table every chat must check before proposing a binding. One row per
+binding, no exceptions. Machine-readable counterpart:
+`hammerspoon/config/keymap.lua`, embedded in §10.
+
+| Binding | Action | Layer | Tool | Subtopic |
+|---|---|---|---|---|
+| `caps` (tap) | Escape | 1 | Hammerspoon | nav — via synthetic keycode 179 on lone tap, not a timeout |
+| `caps+h/j/k/l` | ← ↓ ↑ → | 1 | Hammerspoon | nav — Globe+H collision resolved, event tap wins |
+| `caps+shift+h/j/k/l` | select ← ↓ ↑ → | 1 | Hammerspoon | nav — free; modifiers pass through with fn stripped |
+| `caps+alt+h/l` | word ← → | 1 | Hammerspoon | nav — free, same mechanism |
+| `caps+space` | cycle input source (next, one direction) | 1 | Hammerspoon | **done** — re-emits hyper+space; OS shortcut holds the layout list |
+
+*(everything else pending the per-subtopic chats)*
+
+**Note for the window chat:** `caps+shift+h/j/k/l` and `caps+alt+h/l` are
+currently spent on selection and word motion. If window ops land on `caps`, those
+collide and something has to move. That is a real cost of the modifier choice in
+§7, not an afterthought.
+
+### Known conflicts / rejected bindings
+
+| Binding | Why rejected |
+|---|---|
+| `hyper` (ctrl+alt+cmd+shift) on caps | Requires Karabiner. Unavailable — no admin. Modifier Keys can only map caps to a *single* modifier. |
+| `ctrl+h/j/k/l` for nav | Shadows macOS emacs bindings and readline globally. Fallback only. |
+| `ctrl+←/→` | Reserved by macOS for Spaces. |
+| `ctrl+space` for input source | macOS default, but clashes with IntelliJ basic completion. `ctrl` is a "do not take" row. Native shortcut moved off it. |
+| `caps` tap via timeout heuristic | Unnecessary — macOS emits keycode 179 on a lone Globe tap. Also avoids spurious Escape when a fast chord outruns the timeout. |
+| Double-tap `caps` for input source | Same rejected timing heuristic in another costume. |
+| Anything relying on `hs.spaces` | Not rejected, but **do not commit bindings until verified** — see open questions. |
+
+---
+
+## 6. Subtopic status
+
+| Subtopic | Status | Depends on | Notes |
+|---|---|---|---|
+| Architecture / layer ownership | **done** (2026-08-30) | — | this document |
+| Nav layer (caps → Escape + arrows) | **done** (2026-08-30) | architecture | verified on both keyboards |
+| Config module structure | **done** (2026-08-30) | nav layer | loader / keymap / fnlayer; §10 |
+| Input source switching | **done** (2026-08-30) | nav layer | `caps+space`; three layouts, one direction |
+| Repo & Cowork workflow | **done** (2026-09-01) | config module structure | §0. Repo scaffolded, `bootstrap.sh` written; **not yet run** |
+| Window moving & resizing (halves) | **next** | architecture | primary window use case. **First question is which modifier** — see §7 |
+| Displays & multi-monitor | ready | architecture | must handle office/home monitor swap |
+| Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely |
+| Window switching (focus) | ready | architecture | see Esc/backtick note in open questions |
+| Launcher & app switching | ready | architecture | Spotlight + direct-launch binds |
+| Zeal60 firmware & physical layout | ready | nav layer | modifier row parity, Esc/backtick position, QMK fn audit |
+| Browser | **needs own chat** | nav layer | choice of browser, extensions, scrolling, keyboard nav |
+| Per-app rules & exceptions | blocked | all above | terminal, IDE exclusions |
+| Packaging into dotfiles repo | **partly done** (2026-09-01) | all above | repo + `bootstrap.sh` exist; README must carry the System Settings steps, which are *not* file-based |
+
+---
+
+## 7. Open questions
+
+**Repo / workflow (new, 2026-09-01)**
+
+- **`bootstrap.sh` has not been run.** Until it is, `~/.hammerspoon` and the repo
+  are two independent copies. The script's dry run prints any drift — run that
+  first, reconcile into the repo, then `--apply`.
+- **Does auto-reload survive the symlink?** `init.lua` watches its resolved repo
+  directory rather than `hs.configdir` for this reason (§0), but that is reasoned,
+  not observed. Probe: edit a comment in `hammerspoon/config/keymap.lua`, confirm
+  the reload notification fires. File the result in `docs/verification/`.
+- **Does `debug.getinfo(1,"S").source` give an absolute path here?** If
+  Hammerspoon loads `init.lua` by a relative name, `configRoot()` falls through to
+  `hs.configdir` and auto-reload quietly reverts to the broken case. The load
+  notification prints the watched directory — that is the check, and it is
+  cheap to do at the same time as the probe above.
+- **Where do secrets / machine-specific values go?** Nothing needs them yet. If
+  the window chat introduces per-location display config, decide then whether it
+  is a gitignored local file or branching on `hs.screen` identity.
+
+**Nav layer / layer 0**
+
+- **Escape depends on a GUI setting.** Keycode 179 is only emitted while
+  Keyboard → "Press 🌐 key to" is **Do Nothing**. If restored, Escape silently
+  stops. Belongs in the README manual step alongside the Modifier Keys mapping.
+- **Is 179 stable across macOS updates?** Undocumented. If it disappears, the
+  timeout heuristic is the fallback — kept in the rejected table for that reason.
+- **Secure input.** Event taps are disabled in password fields and at the lock
+  screen; caps→Escape will not work there. Documented limitation, not a bug.
+- **Does Hammerspoon need Input Monitoring** in addition to Accessibility for
+  this tap? §3 currently claims Accessibility only — verify and correct if so.
+- **Layer 0 is not reproducible from the repo, and is now three GUI settings.**
+  Modifier Keys (per keyboard), "Press 🌐 key to → Do Nothing", and the Input
+  Sources shortcut. All stored outside the dotfiles. Documented as manual steps
+  in `README.md`, re-done on every new machine *and* every new keyboard.
+- **Proposed, not decided — extra nav bindings.** `caps+u/d` (page up/down,
+  replacing the fn+↑/↓ the 60% cannot reach), `caps+a/e` (line start/end, with
+  selection falling out of pass-through for free). Both are already expressible
+  in `keymap.lua` and sit commented out there awaiting a decision and a §5 row.
+- `hs.eventtap` reliability: macOS can disable an event tap under load or after a
+  timeout. Watchdog and wake-watcher are in the config from day one; watch
+  whether they actually fire in practice.
+
+**Window ops — which modifier? (undecided)**
+
+- `alt` was listed as the window modifier in earlier drafts of §4, but this was
+  never resolved in a chat. It is now marked unallocated. Open both ways.
+  - **For `caps`:** one modifier for "everything I added". It is also the only
+    modifier verified comfortable and identical on both keyboards.
+  - **For `alt`:** keeps window ops out of the nav namespace, and `hs.hotkey`
+    binds it directly with no event tap involved — simpler, and unaffected if
+    the fn mechanism ever regresses after a macOS update.
+  - **Cost of `caps`:** collides with `caps+shift+hjkl` (selection) and
+    `caps+alt+h/l` (word motion), which are currently free by-products of
+    pass-through. Something has to move.
+  - **Cost of `alt`:** depends on the Zeal60 bottom row sitting where the
+    MacBook's does, which is a firmware task not yet done.
+- **Either choice works mechanically.** `keymap.lua` specs take an `action`
+  function as an alternative to `key`, so an fn-based window binding is a data
+  entry, not a change to `fnlayer.lua`. This question is about namespace and
+  ergonomics only.
+
+**Input source switching — resolved, with a trap worth remembering**
+
+- Resolved: no layout list lives in the config. The tap re-emits hyper+space and
+  the OS shortcut cycles whatever is enabled, in the Input menu's own order.
+  Adding or removing a layout needs no config change.
+- **Trap:** Keyboard Shortcuts rows 60 ("Select the previous input source") and
+  61 ("Select next source in Input menu") must not hold the same chord. A
+  *disabled* row still claims its shortcut and swallows the keystroke —
+  unchecking is not releasing, and the pane gives no indication. Symptom: the
+  chord works on one row and silently does nothing on the other.
+  - Diagnose: `defaults read com.apple.symbolichotkeys AppleSymbolicHotKeys`,
+    compare the `parameters` triples for 60 and 61.
+  - Clear a row properly with parameters `(65535, 65535, 0)`, then
+    `activateSettings -u` to reload without logging out.
+- More generally: when a Keyboard Shortcuts binding misbehaves, read the plist
+  before believing the pane.
+
+**Zeal60**
+
+- **Modifier row parity.** Bottom row likely ships in Windows order
+  (`ctrl/win/alt`) vs the MacBook's `ctrl/alt/cmd`. Do in **firmware, not OS** —
+  Modifier Keys is one-modifier-to-one-modifier only, and every row added there
+  is another per-device GUI setting outside the repo. **Caps must keep sending
+  stock Caps Lock**: the layer 0 remap is keyed to what the device sends and is
+  verified working. Reshape everything else, leave caps alone.
+  - This feeds the window-modifier question: until firmware parity is done,
+    `alt` may not sit in the same place on both keyboards.
+- **QMK fn layer** — audit in VIA. It may restore keys the built-in has in
+  hardware (F-row, media, delete) but must not provide navigation, or the two
+  keyboards diverge. Confirm its fn is a plain `MO()` and never sends a real fn
+  keycode, which would collide with the nav layer.
+- **Esc sits where backtick usually is.** Backtick is therefore likely an
+  fn-chord, making `` cmd+` `` (cycle windows in app) a two-hand reach on the 60%
+  and a single reach on the built-in — an ergonomic divergence in an existing
+  binding. Feeds the window-switching subtopic: prefer a binding of our own that
+  is comfortable on both keyboards over inheriting `` cmd+` ``. Note `` cmd+` ``
+  is in the "do not take" row, so shadowing it needs a decision-log entry.
+
+**Browser**
+
+- **Browser is a subtopic of its own** — browser choice, extensions, scrolling
+  behaviour, in-page keyboard navigation. Mostly application config rather than
+  a layer in §3, so it may not belong in this document at all beyond the points
+  where it collides with the stack. Two things it must answer: (a) does
+  `caps+j/k` scroll in the browser, or does the browser want its own scroll
+  binding — this is a **per-app rules** question and a genuine layer 1 concern;
+  (b) does any extension take bindings that collide with §4's namespace
+  reservations. Vim-style extensions in particular claim `hjkl` and `Escape`,
+  both of which the nav layer now owns globally.
+
+**Rest of stack**
+
+- **Does `hs.spaces` work reliably on 26.6.2?** It is built on undocumented
+  CoreGraphics calls and is the most likely thing to break on a macOS update.
+  Needs an empirical test before any space binding is committed. If it fails,
+  layer 3 has no owner and space management is dropped from scope.
+- How is window state restored after a reboot / display disconnect?
+
+---
+
+## 8. Decision log
+
+Append-only. Each entry: what was decided, why, and what it rules out.
+
+| Date | Decision | Rationale | Rules out |
+|---|---|---|---|
+| 2026-08-30 | No tiling window manager | Tiling is a non-goal; prior AeroSpace trial unsatisfying vs. Linux WMs. Actual need is halves + movement between displays/spaces. | AeroSpace, yabai, and their workspace models |
+| 2026-08-30 | No SIP changes | Corporate machine, no admin. | yabai space ops, anything needing partial SIP disable |
+| 2026-08-30 | **Karabiner-Elements ruled out** | Input remapping is done by `Karabiner-Core-Service` running as **root** to seize devices; the VirtualHIDDevice daemon is root too. Approval requires an admin account (prompt asks for username *and* password). Installing the pkg with elevated rights does not help — the SMAppService approval is a separate, later gate. | Hyper key, home-row mods, HID-level per-device rules, dual-role keys at the driver level |
+| 2026-08-30 | Layer 0 = macOS Modifier Keys, per-keyboard | Only no-privilege remapping mechanism available. Crucially it is per-device, so built-in and Zeal60 can be made to behave identically without firmware changes. | Any layer-0 rule more complex than one-modifier-to-one-modifier |
+| 2026-08-30 | Caps Lock → fn (Globe), → Control (fallback) | fn leaves `ctrl` free, avoiding emacs/readline clashes. Control is the known-good fallback if fn handling is flaky. | Caps as a true hyper key |
+| 2026-08-30 | Zeal60 firmware stays stock *for caps* | Apple's Globe is a vendor-specific HID usage with no mainline QMK keycode and no VIA support. The OS remap is per-device and verified working; changing what caps sends would break it. | QMK/VIA nav layer, firmware-side caps handling |
+| 2026-08-30 | Hammerspoon owns layers 1, 2, 5 | Needs Accessibility only — no daemon, no admin. Matches the preference for scripting over large tools. One config tree in the repo. | Rectangle, Loop, skhd, Raycast, Alfred |
+| 2026-08-30 | Spotlight for launching | Adequate; avoids a heavyweight tool owning layer 4. | Raycast, Alfred |
+| 2026-08-30 | Tap→Escape via synthetic keycode 179 | macOS emits a lone keyDown 179 on an unchorded Globe tap. System-computed, so no timing heuristic. | Timeout/dirty-flag tap detection, and its fast-chord false-positive class |
+| 2026-08-30 | Nav cluster stays on `hjkl` | Session event tap intercepts Globe+H and Globe+E before the system and suppresses both. Verified on both keyboards. | Relocating to `jkl;`; any Keyboard Shortcuts workaround for Globe+H |
+| 2026-08-30 | Zeal60 firmware may reshape to **match** the built-in, never to exceed it | Same principle that ruled out a QMK nav layer, applied in the convergent direction: F-row and modifier parity make the keyboards identical, a nav layer would make them diverge. | Zeal60-only capabilities; OS-side multi-modifier remapping |
+| 2026-08-30 | `caps+space` cycles input source; it re-emits hyper+space, and the OS "next source" shortcut is moved onto that chord | Tap-to-switch was lost to the "Do Nothing" setting Escape depends on, and language switching is the highest-frequency non-nav action, so it earns the prime slot. The recorder will not accept fn, so a tap is required regardless; addressing the native shortcut via an unreachable chord keeps the layout list in the system rather than in the config, and frees `ctrl+space` for IntelliJ. Three layouts, one direction is sufficient. | Hardcoding layouts in the config; `hs.keycodes.setLayout` (breaks on IMEs); `ctrl+space`; double-tap caps; binding fn natively in Keyboard Shortcuts |
+| 2026-08-30 | Config split: `init.lua` loader, `config/keymap.lua` data, `modules/fnlayer.lua` mechanism. **Exactly one tap owns fn.** | Bindings change often, the tap does not, so adding a binding should be a data edit. The single-tap invariant is forced by the mechanism: two taps on fn give nondeterministic ordering and double consumption. Specs accept an `action` function so non-keystroke bindings need no mechanism change. | Per-feature event taps; any module creating its own fn tap |
+| 2026-09-01 | Repo at `~/Projects/claude/macos-productivity`; config under `hammerspoon/`, prose at the root, probe output in `docs/verification/` | Layer 0 is GUI settings and every macOS probe has to be run by hand, so the repo has to carry prose and evidence, not just Lua. Flat and boring beats clever — one config dir, one docs dir. | A bare dotfiles-style tree with no place for verification output |
+| 2026-09-01 | **Install by symlink**, via a dry-run-by-default `bootstrap.sh` that backs up first | A copy/deploy step means two writable copies and silent drift between the repo and what is actually running — the exact failure this document exists to prevent. Symlinking makes the repo the live config. Dry-run default and a diff before overwriting keep a verified-working setup from being clobbered by a stale repo. | `rsync`-style deploy; connecting `~/.hammerspoon` as a second editable folder; editing the live config directly |
+| 2026-09-01 | `init.lua` watches its **resolved** directory, not `hs.configdir` | FSEvents does not report writes that land on a symlink's target, so the original watcher would have stopped auto-reloading the moment bootstrap ran — and failed silently, which is worse than not having it. | Keeping the naive `hs.pathwatcher.new(hs.configdir)` under a symlink install |
+| 2026-09-01 | `SETUP.md` lives in the repo; project knowledge holds a mirror, repo wins | The doc and the config it describes change in the same edit and belong in the same commit. The mirror keeps chats that are not connected to the folder working, at the cost of one sync step per session. | Project knowledge as the authoritative copy; dropping the project doc and losing unconnected chats |
+| 2026-09-01 | macOS-side facts are gathered as **probes**: user runs the command, output is filed in `docs/verification/` | A Cowork session's shell is a Linux VM with only this folder mounted — `defaults`, `hs`, and System Settings are all unreachable from it. Writing probes down as artefacts stops each session re-asking the same question. | Any workflow that assumes a session can inspect the running macOS |
+
+---
+
+## 9. Config file inventory
+
+Repo paths are relative to `~/Projects/claude/macos-productivity`. Live paths are
+what Hammerspoon reads; the arrow is the symlink `bootstrap.sh` creates.
+
+| File | Repo path | Live path | Owns layer(s) |
+|---|---|---|---|
+| `init.lua` | `hammerspoon/init.lua` | → `~/.hammerspoon/init.lua` | loader only — no bindings, no logic |
+| `keymap.lua` | `hammerspoon/config/keymap.lua` | → `~/.hammerspoon/config/` | bindings as data; machine-readable twin of §5 |
+| `fnlayer.lua` | `hammerspoon/modules/fnlayer.lua` | → `~/.hammerspoon/modules/` | 1 — **sole owner of the fn tap** |
+| `bootstrap.sh` | `bootstrap.sh` | — | creates the three symlinks above; dry run by default |
+| *(not in repo)* | — | `~/.hammerspoon/Spoons/` | Hammerspoon's own; gitignored, left alone by bootstrap |
+| *(GUI setting — not a file)* | README manual step 1 | System Settings → Keyboard → Modifier Keys, **per keyboard** | 0 |
+| *(GUI setting — not a file)* | README manual step 2 | Keyboard → "Press 🌐 key to" → **Do Nothing** | 0 — Escape depends on this |
+| *(GUI setting — not a file)* | README manual step 3 | Keyboard Shortcuts → Input Sources → "Select next source in Input menu" = `⌃⌥⇧⌘Space`, **and the "previous source" row cleared, not merely unchecked** | 0 — `caps+space` depends on this |
+| *(firmware — not a file in this repo)* | — | Zeal60 VIA keymap | physical layout parity only |
+| `DefaultKeyBinding.dict` | *(not written)* | `~/Library/KeyBindings/` | *(only if the Control fallback is adopted)* |
+
+**Drift:** §5 and `keymap.lua` state the same bindings — §5 with rationale, the
+Lua without. Every binding decision is a two-file edit, in one commit. Both are
+embedded in this document so a chat that receives it sees both.
+
+---
+
+## 10. Current config
+
+Nav layer verified working on both keyboards, 2026-08-30. Split into modules
+2026-08-30. Moved into the repo and given a symlink-aware config watcher
+2026-09-01 — **re-verify `caps+hjkl`, lone-tap Escape, `caps+space` and
+auto-reload after running `bootstrap.sh`.**
+
+### `hammerspoon/init.lua` → `~/.hammerspoon/init.lua`
+
+```lua
+-- ~/.hammerspoon/init.lua — loader only. No bindings live here.
+--
+-- Bindings:  config/keymap.lua
+-- Mechanism: modules/fnlayer.lua
+--
+-- This file is a SYMLINK to <repo>/hammerspoon/init.lua (see bootstrap.sh).
+--
+-- Manual System Settings steps this config depends on (SETUP.md §9):
+--   1. Keyboard → Modifier Keys → Caps Lock = fn/Globe, set PER KEYBOARD
+--   2. Keyboard → "Press 🌐 key to" → Do Nothing        (Escape depends on this)
+--   3. Keyboard Shortcuts → Input Sources → "Select next source in Input menu"
+--      = ⌃⌥⇧⌘Space, and the "previous source" row CLEARED, not just unchecked
+
+local keymap  = require("config.keymap")
+local fnlayer = require("modules.fnlayer")
+
+fnlayer.start(keymap.fn)
+
+-- Auto-reload on config change.
+--
+-- hs.configdir is ~/.hammerspoon, whose entries are symlinks into the repo.
+-- FSEvents reports on the directory it is given and does NOT see writes that
+-- land on a symlink's target, so watching hs.configdir alone would silently
+-- stop auto-reloading once bootstrap.sh has run. Resolve this file's own link
+-- and watch the repo directory instead; fall back to hs.configdir when the
+-- config is a real directory (e.g. before bootstrap, or on a copy install).
+local function configRoot()
+  local this = debug.getinfo(1, "S").source:sub(2)      -- ~/.hammerspoon/init.lua
+  local target = hs.fs.symlinkAttributes(this, "target")
+  if target then
+    if target:sub(1, 1) ~= "/" then                     -- relative link
+      target = hs.configdir .. "/" .. target
+    end
+    return target:match("^(.*)/[^/]+$")
+  end
+  return hs.configdir
+end
+
+local root = configRoot()
+configWatcher = hs.pathwatcher.new(root, function(paths)
+  for _, p in ipairs(paths) do
+    if p:sub(-4) == ".lua" then hs.reload() return end
+  end
+end)
+configWatcher:start()
+
+hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
+```
+
+### `hammerspoon/config/keymap.lua`
+
+```lua
+-- config/keymap.lua — bindings as data. This is the file you edit.
+-- Machine-readable counterpart to SETUP.md §5. Keep them in sync.
+
+local HYPER = { "ctrl", "alt", "cmd", "shift" }  -- private channel to OS shortcuts
+
+-- Spec shape:
+--   key         (required unless action) destination key name, e.g. "left"
+--   mods        (optional) modifiers to ADD to the replacement. default {}
+--   passthrough (optional) default true.
+--                 true  → mods are merged with whatever you were holding,
+--                         so caps+shift+<k> and caps+alt+<k> work for free
+--                 false → mods REPLACE what you were holding. use for chords
+--                         addressed at the OS rather than at the focused app
+--   action      (optional) a function, called on keyDown. use when the result
+--                 is not a keystroke — e.g. window ops. excludes `key`
+--
+-- Never put "fn" in mods. The replacement must not re-enter the tap.
+
+return {
+  fn = {
+    -- nav cluster — §5, decided and verified
+    h     = { key = "left"  },
+    j     = { key = "down"  },
+    k     = { key = "up"    },
+    l     = { key = "right" },
+
+    -- input source cycle — re-emits the chord the OS shortcut sits on.
+    -- passthrough=false: the OS shortcut wants exactly hyper+space, not
+    -- hyper+whatever-else-you-were-holding. No layout list lives here.
+    space = { key = "space", mods = HYPER, passthrough = false },
+
+    -- PROPOSED, NOT DECIDED — §7. Uncomment only once a §5 row exists.
+    -- u = { key = "pageup"  },
+    -- d = { key = "pagedown" },
+    -- a = { key = "left",  mods = { "cmd" } },
+    -- e = { key = "right", mods = { "cmd" } },
+  },
+}
+```
+
+### `hammerspoon/modules/fnlayer.lua`
+
+```lua
+-- modules/fnlayer.lua — sole owner of the fn/Globe event tap (SETUP.md §3, layer 1).
+--
+-- INVARIANT: exactly one event tap may watch the fn flag. Two taps means
+-- nondeterministic ordering and double consumption. Anything fn-based
+-- registers here via config/keymap.lua. Anything NOT fn-based can use
+-- hs.hotkey instead, which needs no tap.
+
+local M = {}
+
+-- Synthetic keyDown macOS emits on a lone, unchorded Globe tap. Undocumented;
+-- only emitted while Keyboard → "Press 🌐 key to" is Do Nothing.
+local GLOBE_TAP_KEYCODE = 179
+
+local eventTypes = hs.eventtap.event.types
+local PASSABLE   = { "cmd", "alt", "ctrl", "shift" }  -- note: fn deliberately absent
+
+-- Modifiers you were actually holding, minus fn. Dropping fn is what stops
+-- fn+← becoming Home, and is also the loop guard: the replacement carries no
+-- fn, so this tap will not re-match it.
+local function stripFn(flags)
+  local mods = {}
+  for _, m in ipairs(PASSABLE) do
+    if flags[m] then table.insert(mods, m) end
+  end
+  return mods
+end
+
+local function merge(a, b)
+  local seen, out = {}, {}
+  for _, list in ipairs({ a or {}, b or {} }) do
+    for _, m in ipairs(list) do
+      if not seen[m] then
+        seen[m] = true
+        table.insert(out, m)
+      end
+    end
+  end
+  return out
+end
+
+-- Resolve key NAMES to keycodes once at load, and complain loudly about a bad
+-- spec rather than silently doing nothing at 3pm on a Tuesday.
+local function compile(keymap)
+  local byKeycode = {}
+  for name, spec in pairs(keymap) do
+    local kc = hs.keycodes.map[name]
+    if not kc then
+      hs.printf("fnlayer: unknown source key %q — binding skipped", name)
+    elseif not (spec.key or spec.action) then
+      hs.printf("fnlayer: %q has neither key nor action — skipped", name)
+    elseif spec.key and not hs.keycodes.map[spec.key] then
+      hs.printf("fnlayer: %q → unknown destination key %q — skipped",
+                name, spec.key)
+    else
+      for _, m in ipairs(spec.mods or {}) do
+        if m == "fn" then
+          error(("fnlayer: %q has fn in mods — would loop"):format(name))
+        end
+      end
+      byKeycode[kc] = spec
+    end
+  end
+  return byKeycode
+end
+
+function M.start(keymap)
+  if M.tap then M.tap:stop() end
+  local bindings = compile(keymap)
+
+  M.tap = hs.eventtap.new(
+    { eventTypes.keyDown, eventTypes.keyUp },
+    function(e)
+      local kc    = e:getKeyCode()
+      local flags = e:getFlags()
+      local down  = (e:getType() == eventTypes.keyDown)
+
+      -- Lone tap → Escape. Stays in mechanism rather than the keymap: 179
+      -- arrives as a keyDown with no matching keyUp, so it cannot use the
+      -- replacement-event path below and needs keyStroke to synthesize both.
+      if kc == GLOBE_TAP_KEYCODE then
+        if down then hs.eventtap.keyStroke({}, "escape", 0) end
+        return true
+      end
+
+      if not flags.fn then return false end
+      local spec = bindings[kc]
+      if not spec then return false end
+
+      if spec.action then
+        if down then spec.action() end
+        return true
+      end
+
+      local mods
+      if spec.passthrough == false then
+        mods = spec.mods or {}
+      else
+        mods = merge(spec.mods, stripFn(flags))
+      end
+
+      -- Delete the original, post a replacement. Handling keyUp identically
+      -- means apps never see an unmatched keyDown, and OS autorepeat drives
+      -- repeat for free.
+      return true, { hs.eventtap.event.newKeyEvent(mods, spec.key, down) }
+    end
+  )
+  M.tap:start()
+
+  -- macOS disables taps under load, after timeouts, and across sleep.
+  if M.watchdog then M.watchdog:stop() end
+  M.watchdog = hs.timer.doEvery(5, function()
+    if M.tap and not M.tap:isEnabled() then
+      print("fnlayer: tap disabled — restarting")
+      M.tap:start()
+    end
+  end)
+
+  if M.wakeWatcher then M.wakeWatcher:stop() end
+  M.wakeWatcher = hs.caffeinate.watcher.new(function(evt)
+    if evt == hs.caffeinate.watcher.systemDidWake
+      or evt == hs.caffeinate.watcher.screensDidUnlock then
+      if M.tap and not M.tap:isEnabled() then M.tap:start() end
+    end
+  end)
+  M.wakeWatcher:start()
+end
+
+function M.stop()
+  if M.tap then M.tap:stop() end
+  if M.watchdog then M.watchdog:stop() end
+  if M.wakeWatcher then M.wakeWatcher:stop() end
+end
+
+return M
+```
+
+**Why it is shaped this way:**
+
+- Returning `true, { repl }` deletes the original and posts a replacement rather
+  than consuming and firing a separate keystroke. Handling `keyUp` the same way
+  means apps never see an unmatched keyDown, and **OS autorepeat drives repeat
+  for free**.
+- `stripFn` is what stops fn+← becoming Home. It also yields `caps+shift+l`
+  (select-right) and `caps+alt+l` (word-right) with no extra bindings, since
+  surviving modifiers ride along on the arrow.
+- Stripping fn is also the loop guard: the replacement carries no fn, so the tap
+  will not re-match it. `passthrough = false` entries are guarded instead by the
+  `compile` check that rejects fn in `mods`.
+- `caps+space` handles keyUp too, for the same reason as the arrows, and so no
+  stray space reaches the focused field.
+- `caps+space` deliberately holds no knowledge of which layouts exist. The OS
+  shortcut cycles the enabled ones in Input-menu order, so adding or removing a
+  layout needs no config change.
+- `compile` warns and skips rather than aborting, so one typo does not take the
+  whole nav layer down with it. **Check the Hammerspoon console after editing
+  the keymap** — a skipped binding looks identical to a broken one.
+- `configRoot()` in `init.lua` exists only because of the symlink install (§0).
+  Under a copy install it is a no-op that returns `hs.configdir`.
