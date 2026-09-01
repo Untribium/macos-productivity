@@ -1,12 +1,25 @@
 # macOS Window & Input Setup — Source of Truth
 
-> This file is the authoritative spec for the setup. Any chat that changes a
-> binding, a tool choice, or a layer boundary must produce a diff to this file.
-> If something isn't in here, it isn't decided.
+> **Read this box first — there are two copies of this file.**
 >
-> **This file now lives in the repo** (`macos-productivity/SETUP.md`) and is
-> mirrored into Claude project knowledge at the end of a session. The repo copy
-> wins; see §0. §10 embeds the live config for chats that cannot see the repo.
+> The authoritative copy lives in the **repo**, at
+> `~/Projects/claude/macos-productivity/SETUP.md`. A **mirror** is kept in Claude
+> project knowledge so that chats without the folder connected (phone, web) can
+> still work. The mirror is a snapshot and is stale by definition.
+>
+> - **If this session has the folder connected:** read the repo copy and ignore
+>   the project-knowledge one. Check they agree — the mirror carries a
+>   `Mirror synced:` line naming the commit it was taken from; if that is not
+>   `git log -1`, the mirror is behind and the repo is right. Never merge the
+>   mirror back.
+> - **If this session does NOT have the folder connected:** you are reading the
+>   mirror. Say so up front. You may reason, design and propose, but you cannot
+>   see the live config, so treat §10 as possibly out of date and do not claim
+>   anything is verified. Any decision reached here has to be re-applied in a
+>   connected session before it is real.
+>
+> Any chat that changes a binding, a tool choice, or a layer boundary must
+> produce a diff to this file. If something isn't in here, it isn't decided.
 
 **Status:** architecture decided; nav layer built and verified; repo scaffolded
 **Last updated:** 2026-09-01
@@ -70,10 +83,22 @@ lands so the next session does not re-ask.
    `keymap.lua` edit in the same commit.
 5. Session ends with a commit and a mirror of `SETUP.md` into project knowledge.
 
-**Mirror rule:** the repo copy is authoritative. Project knowledge is a
-read-only copy for chats that are not connected to the folder. If the two
+**Mirror rule:** the repo copy is authoritative. Project knowledge holds a
+read-only snapshot for chats that are not connected to the folder. If the two
 disagree, the repo is right and the mirror is stale — never merge the mirror
 back.
+
+**Syncing the mirror** (last step of a connected session, after committing):
+
+1. `git log -1 --format='%h %ad' --date=short`
+2. Write the repo `SETUP.md` into project knowledge at path `SETUP.md`, with one
+   line inserted directly under the `# ` title:
+   `> **Mirror synced:** <hash> (<date>). Snapshot — the repo copy is authoritative.`
+3. That line is the only difference between the two files. It is what lets a
+   connected chat detect a stale mirror in one command.
+
+A session that changes nothing does not re-sync; writing a project doc busts the
+prompt cache for every chat in the project.
 
 ---
 
