@@ -324,6 +324,7 @@ binding, no exceptions. Machine-readable counterpart:
 | `caps+shift+h/j/k/l` | select ← ↓ ↑ → | 1 | Hammerspoon | nav — free; modifiers pass through with fn stripped |
 | `caps+alt+h/l` | word ← → | 1 | Hammerspoon | nav — free, same mechanism |
 | `caps+space` | cycle input source (next, one direction) | 1 | Hammerspoon | **done** — re-emits hyper+space; OS shortcut holds the layout list |
+| `` cmd+` `` (key left of 1, keycode 50 here) | cycle the frontmost app's windows across spaces/displays, MRU; hold cmd to step, release commits; `cmd+shift` reverses | 2 | Hammerspoon `hs.hotkey` | **PoC** (2026-10-25) — `modules/wincycle.lua`; user-tested: gap after reload, fill by visit, toggle, 3-window step, reverse all as expected |
 
 *(everything else pending the per-subtopic chats)*
 
@@ -358,7 +359,7 @@ collide and something has to move. That is a real cost of the modifier choice in
 | Window moving & resizing (halves) | **next** | architecture | primary window use case. **First question is which modifier** — see §7 |
 | Displays & multi-monitor | ready | architecture | must handle office/home monitor swap |
 | Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely. 2026-10-25 on 27.0.1: `allSpaces`/`windowsForSpace`/`focusedSpace`/watcher work; **`moveWindowToSpace()` returns true but does not move the window**; `missionControlSpaceNames()` returns nil |
-| Window switching (focus) | **in progress** (target set 2026-10-25) | architecture | not a switcher: `` cmd+` `` cycling the app's windows **across spaces**, MRU. Findings re-verified; see §7 "Window cycling across spaces" |
+| Window switching (focus) | **PoC working** (2026-10-25) | architecture | not a switcher: `` cmd+` `` cycling the app's windows **across spaces**, MRU. Findings re-verified; see §7 "Window cycling across spaces" |
 | Launcher & app switching | ready | architecture | Spotlight + direct-launch binds |
 | Zeal60 firmware & physical layout | ready | nav layer | modifier row parity, Esc/backtick position, QMK fn audit |
 | Browser | **needs own chat** | nav layer | choice of browser, extensions, scrolling, keyboard nav |
@@ -532,6 +533,12 @@ collide and something has to move. That is a real cost of the modifier choice in
      its real window 3736 from space 6 to 7. So **classify ids system-wide,
      not per space**, or a moved window's companion looks like an unknown
      window. Still open: do synthetic ⌃N presses switch reliably?
+- **PoC timing (2026-10-25):** a press costs 9–29 ms inside Hammerspoon,
+  same-space or cross-space (snapshot ≤14 ms, `focus()` ≤21 ms). The
+  extra time on cross-space presses is macOS's space switch (a crossfade
+  with Reduce Motion), not the module. To confirm: compare with ⌃N.
+- Side note: ⌃8 ("Switch to Desktop 8") did nothing when tried. Not
+  investigated; something may be taking ⌃8 first.
 
 **Input source switching — resolved, with a trap worth remembering**
 
@@ -648,6 +655,7 @@ what Hammerspoon reads; the arrow is the symlink `bootstrap.sh` creates.
 | `init.lua` | `hammerspoon/init.lua` | → `~/.hammerspoon/init.lua` | loader only — no bindings, no logic |
 | `keymap.lua` | `hammerspoon/config/keymap.lua` | → `~/.hammerspoon/config/` | bindings as data; machine-readable twin of §5 |
 | `fnlayer.lua` | `hammerspoon/modules/fnlayer.lua` | → `~/.hammerspoon/modules/` | 1 — **sole owner of the fn tap** |
+| `wincycle.lua` | `hammerspoon/modules/wincycle.lua` | → `~/.hammerspoon/modules/` | 2 — `` cmd+` `` across spaces; window cache, per-app AX observers, no event tap |
 | `bootstrap.sh` | `bootstrap.sh` | — | creates the three symlinks above; dry run by default |
 | `urlctl.lua` | `hammerspoon/modules/urlctl.lua` | → `~/.hammerspoon/modules/` | none — `hammerspoon://reload` and `://status` endpoints; writes `.live/status.json` |
 | `probes/` | `hammerspoon/probes/` | — *(read from the repo path by `init.lua`; not linked)* | none — `README.md` tracked; `active.lua` gitignored, run on load by `init.lua` |
@@ -733,6 +741,7 @@ local keymap  = require("config.keymap")
 local fnlayer = require("modules.fnlayer")
 
 fnlayer.start(keymap.fn)
+require("modules.wincycle").start(keymap.wincycle)
 
 -- Optional, gitignored probe (probes/README.md). Caught, so a broken probe
 -- cannot take the config down with it.
@@ -791,6 +800,13 @@ return {
     -- a = { key = "left",  mods = { "cmd" } },
     -- e = { key = "right", mods = { "cmd" } },
   },
+
+  -- cmd + key left of 1: cycle the frontmost app's windows across spaces, MRU
+  -- (§4, §5, modules/wincycle.lua). cmd+shift reverses. Keycodes, not
+  -- characters, so switching input layout does not move it. 50 is that key
+  -- on ANSI hardware (this machine's built-in). ISO hardware (CH) likely
+  -- sends 10 there instead: check on the work machine.
+  wincycle = { mods = { "cmd" }, keycodes = { 50 } },
 }
 ```
 
@@ -1085,6 +1101,230 @@ function M.dumpConsole()
   if not M.dir then return end
   local f = io.open(M.dir .. "/console.txt", "w")
   if f then f:write(hs.console.getConsole() or "", "\n"); f:close() end
+end
+
+return M
+```
+
+### `hammerspoon/modules/wincycle.lua`
+
+```lua
+-- modules/wincycle.lua — cmd+` across spaces: cycle the frontmost app's
+-- windows, MRU, on every space and display (SETUP.md §7 "Window cycling
+-- across spaces", §8 2026-10-25). PROOF OF CONCEPT.
+--
+-- Why a cache: no API lists an app's windows on other spaces (AppKit
+-- space-filters kAXWindows). But a handle seen once keeps working off-space,
+-- and focus() on it switches to its space. So windows are cached as they
+-- become reachable, from three sources:
+--   1. a window filter: windows on visible spaces, plus each app's
+--      focused/main window, which AppKit reports on any space
+--   2. a space watcher: everything visible after each space change
+--   3. per-app AX observers (added when an app is first activated):
+--      AXTitleChanged etc. hand over off-space windows whenever they change
+--
+-- Liveness: hs.spaces.windowSpaces(id) is empty for a closed window, and the
+-- window filter misses off-space closes, so entries are pruned on every press.
+-- An entry is admitted only once it has a space (new windows briefly have
+-- none).
+--
+-- Cycling: holding cmd and pressing the key steps through an MRU snapshot,
+-- focusing as it goes. MRU is only updated when cmd is released, detected by
+-- polling the modifiers while a cycle is open. That avoids a flagsChanged
+-- event tap (SETUP.md §8: one tap owns fn).
+
+local diag = require("modules.diag")
+local log  = diag.logger("wincycle")
+
+local M = {}
+
+local cache = {}   -- id -> { win, pid, app, seen }
+local seq   = 0    -- monotonic MRU counter
+local cycle = nil  -- { list, idx, pid, poll } while cmd is held
+
+local function now() seq = seq + 1; return seq end
+
+local function safe(fn, ...)
+  local ok, v = pcall(fn, ...)
+  if ok then return v end
+end
+
+local function spacesOf(id) return hs.spaces.windowSpaces(id) or {} end
+
+-- Admit or refresh a window. `focused` bumps it to the front of MRU.
+local function touch(win, focused)
+  if not win then return end
+  local id = safe(win.id, win)
+  if not id then return end
+  local e = cache[id]
+  if not e then
+    if safe(win.isStandard, win) ~= true then return end
+    if #spacesOf(id) == 0 then return end         -- not ordered in yet, or gone
+    local app = safe(win.application, win)
+    local pid = app and safe(app.pid, app)
+    if not pid then return end
+    e = { win = win, pid = pid, app = safe(app.name, app) or "?", seen = 0 }
+    cache[id] = e
+  end
+  if focused and not cycle then e.seen = now() end
+end
+
+local function prune()
+  for id in pairs(cache) do
+    if #spacesOf(id) == 0 then cache[id] = nil end
+  end
+end
+
+---------------------------------------------------------------------------
+-- sources
+---------------------------------------------------------------------------
+
+local function seedVisible()
+  for _, w in ipairs(hs.window.allWindows()) do touch(w) end
+end
+
+local OBSERVED = { "AXTitleChanged", "AXWindowCreated",
+                   "AXFocusedWindowChanged", "AXMainWindowChanged" }
+local observers = {}   -- pid -> hs.axuielement.observer
+
+local function windowOf(el)
+  if safe(el.attributeValue, el, "AXRole") == "AXWindow" then return el end
+  return safe(el.attributeValue, el, "AXWindow")
+end
+
+local function observe(app)
+  local pid = app and safe(app.pid, app)
+  if not pid or observers[pid] then return end
+  local obs = safe(hs.axuielement.observer.new, pid)
+  local appEl = safe(hs.axuielement.applicationElement, app)
+  if not (obs and appEl) then return end
+  obs:callback(function(_, el)
+    local wel = windowOf(el)
+    local win = wel and safe(wel.asHSWindow, wel)
+    if win then touch(win) end
+  end)
+  for _, n in ipairs(OBSERVED) do pcall(obs.addWatcher, obs, appEl, n) end
+  obs:start()
+  observers[pid] = obs
+  log.d("observing %s (%d)", safe(app.name, app) or "?", pid)
+end
+
+---------------------------------------------------------------------------
+-- cycling
+---------------------------------------------------------------------------
+
+local function endCycle()
+  if not cycle then return end
+  if cycle.poll then cycle.poll:stop() end
+  local e = cycle.list[cycle.idx]
+  cycle = nil
+  if e then e.seen = now() end   -- commit: the landed-on window becomes MRU
+end
+
+local function startCycle(app, focusedId)
+  prune()
+  local pid = app:pid()
+  -- make sure the app's own reachable windows are in, before snapshotting
+  for _, w in ipairs(app:allWindows()) do touch(w) end
+  touch(app:focusedWindow()); touch(app:mainWindow())
+
+  local list = {}
+  for id, e in pairs(cache) do
+    if e.pid == pid and safe(e.win.isMinimized, e.win) ~= true then list[#list + 1] = e end
+  end
+  -- the focused window goes first regardless of its counter
+  table.sort(list, function(a, b)
+    local af, bf = a.win:id() == focusedId, b.win:id() == focusedId
+    if af ~= bf then return af end
+    return a.seen > b.seen
+  end)
+  if #list < 2 then return log.i("%s: %d window(s) known, nothing to cycle", app:name(), #list) end
+
+  cycle = { list = list, idx = 1, pid = pid }
+  cycle.poll = hs.timer.doEvery(0.05, function()
+    if not hs.eventtap.checkKeyboardModifiers().cmd then endCycle() end
+  end)
+  return true
+end
+
+local function ms(t0) return (hs.timer.absoluteTime() - t0) / 1e6 end
+
+local function step(delta)
+  local t0 = hs.timer.absoluteTime()
+  local app = hs.application.frontmostApplication()
+  if not app then return end
+  if cycle and cycle.pid ~= app:pid() then endCycle() end
+  local tSnap = 0
+  if not cycle then
+    local fw = hs.window.focusedWindow()
+    if not startCycle(app, fw and fw:id()) then return end
+    tSnap = ms(t0)
+  end
+  local tFocus0 = hs.timer.absoluteTime()
+  local n = #cycle.list
+  for _ = 1, n do                       -- skip entries that died mid-cycle
+    cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
+    local e = cycle.list[cycle.idx]
+    local id = safe(e.win.id, e.win)
+    if id and #spacesOf(id) > 0 and pcall(e.win.focus, e.win) then
+      log.i("%s → %d (%d/%d) on space %s  [snapshot %.0fms, focus %.0fms, total %.0fms]",
+            e.app, id, cycle.idx, n, hs.inspect(spacesOf(id)), tSnap, ms(tFocus0), ms(t0))
+      return
+    end
+    if id then cache[id] = nil end
+  end
+  endCycle()
+end
+
+---------------------------------------------------------------------------
+-- wiring
+---------------------------------------------------------------------------
+
+-- spec: { mods = {"cmd"}, keycodes = { 50 } } from config/keymap.lua
+function M.start(spec)
+  M.wf = hs.window.filter.new(false):setDefaultFilter({})
+  M.wf:subscribe(hs.window.filter.windowFocused, function(w) touch(w, true) end)
+  M.wf:subscribe({ hs.window.filter.windowCreated, hs.window.filter.windowVisible,
+                   hs.window.filter.windowTitleChanged }, function(w) touch(w) end)
+  for _, w in ipairs(M.wf:getWindows()) do touch(w) end
+
+  M.spaceWatcher = hs.spaces.watcher.new(function()
+    M.settle = hs.timer.doAfter(0.3, seedVisible)
+  end)
+  M.spaceWatcher:start()
+
+  M.appWatcher = hs.application.watcher.new(function(_, event, app)
+    if event == hs.application.watcher.activated then observe(app) end
+  end)
+  M.appWatcher:start()
+  observe(hs.application.frontmostApplication())
+
+  M.hotkeys = {}
+  for _, kc in ipairs(spec.keycodes) do
+    local fwd, back = function() step(1) end, function() step(-1) end
+    M.hotkeys[#M.hotkeys + 1] = hs.hotkey.bind(spec.mods, kc, fwd, nil, fwd)
+    local rev = { "shift" }
+    for _, m in ipairs(spec.mods) do rev[#rev + 1] = m end
+    M.hotkeys[#M.hotkeys + 1] = hs.hotkey.bind(rev, kc, back, nil, back)
+  end
+
+  diag.provide("wincycle", function()
+    local byApp = {}
+    for id, e in pairs(cache) do
+      byApp[e.app] = byApp[e.app] or {}
+      table.insert(byApp[e.app], { id = id, seen = e.seen, spaces = spacesOf(id),
+                                   title = (safe(e.win.title, e.win) or ""):sub(1, 40) })
+    end
+    for _, l in pairs(byApp) do table.sort(l, function(a, b) return a.seen > b.seen end) end
+    local obs = {}
+    for pid in pairs(observers) do obs[#obs + 1] = pid end
+    return { windows = byApp, observedPids = obs, cycling = cycle ~= nil }
+  end)
+
+  seedVisible()
+  log.i("started: keycodes %s, %d windows cached", hs.inspect(spec.keycodes),
+        (function() local n = 0 for _ in pairs(cache) do n = n + 1 end return n end)())
+  return M
 end
 
 return M

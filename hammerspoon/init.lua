@@ -53,6 +53,7 @@ local keymap  = require("config.keymap")
 local fnlayer = require("modules.fnlayer")
 
 fnlayer.start(keymap.fn)
+require("modules.wincycle").start(keymap.wincycle)
 
 -- Optional, gitignored probe (probes/README.md). Caught, so a broken probe
 -- cannot take the config down with it.

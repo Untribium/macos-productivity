@@ -35,4 +35,11 @@ return {
     -- a = { key = "left",  mods = { "cmd" } },
     -- e = { key = "right", mods = { "cmd" } },
   },
+
+  -- cmd + key left of 1: cycle the frontmost app's windows across spaces, MRU
+  -- (§4, §5, modules/wincycle.lua). cmd+shift reverses. Keycodes, not
+  -- characters, so switching input layout does not move it. 50 is that key
+  -- on ANSI hardware (this machine's built-in). ISO hardware (CH) likely
+  -- sends 10 there instead: check on the work machine.
+  wincycle = { mods = { "cmd" }, keycodes = { 50 } },
 }
