@@ -53,8 +53,9 @@ config look broken.
 - tap `caps` alone → Escape (try it in vim)
 - `caps+space` → cycles input source
 - edit a comment in `hammerspoon/config/keymap.lua` → Hammerspoon reloads
-- the load notification names the directory being watched: it must be the
-  **repo** path, not `~/.hammerspoon`
+- a brief "Hammerspoon config loaded" alert appears on each reload
+- `.live/status.json` → `watching` names the directory being watched: it must
+  be the **repo** path, not `~/.hammerspoon`
 
 ## Editing
 

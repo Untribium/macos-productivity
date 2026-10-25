@@ -55,8 +55,8 @@ before doing it. `hammerspoon/Spoons/` is gitignored.
 symlink's *target*, so a watcher on `hs.configdir` would silently stop firing
 after bootstrap. `init.lua` resolves its own symlink and watches the repo
 directory instead, falling back to `hs.configdir` when the config is a real
-directory. The load notification prints the directory being watched — that is
-the check. *(Unverified as of 2026-09-01: confirm a repo-side edit still
+directory. `.live/status.json` → `watching` names the directory being watched;
+that is the check (the load message itself is a brief `hs.alert`). *(Unverified as of 2026-09-01: confirm a repo-side edit still
 triggers a reload.)*
 
 ### What a Cowork session can and cannot touch
@@ -769,7 +769,9 @@ end
 -- every module's provider.
 require("modules.urlctl").start({ root = root, probe = probe })
 
-hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
+-- A transient alert, not a notification: reloads are frequent, and persistent
+-- notifications would pile up. The watched path is in .live/status.json.
+hs.alert.show("Hammerspoon config loaded", 1.2)
 ```
 
 ### `hammerspoon/config/keymap.lua`

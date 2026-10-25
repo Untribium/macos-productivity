@@ -84,7 +84,7 @@ say
 if (( APPLY )); then
   say "done. Now: Hammerspoon menu → Reload Config, then re-verify"
   say "  caps+hjkl, lone-tap Escape, caps+space  (SETUP.md §10)"
-  say "and check the Hammerspoon console — the load notification prints the"
+  say "and check .live/status.json in the repo — its \"watching\" field is the"
   say "directory the auto-reload watcher is on; it must be the repo path."
 else
   say "dry run. re-run with --apply to make the changes above."

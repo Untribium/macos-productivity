@@ -69,4 +69,6 @@ end
 -- every module's provider.
 require("modules.urlctl").start({ root = root, probe = probe })
 
-hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
+-- A transient alert, not a notification: reloads are frequent, and persistent
+-- notifications would pile up. The watched path is in .live/status.json.
+hs.alert.show("Hammerspoon config loaded", 1.2)
