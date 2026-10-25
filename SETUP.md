@@ -563,6 +563,18 @@ collide and something has to move. That is a real cost of the modifier choice in
   number of desktops (the user sometimes has more than 10); "Switch to
   Desktop N" exists only for 1–16. Both could sit on unreachable hyper
   chords, like `caps+space` (§8), so the user's own keys stay free.
+  **Synthetic shortcuts work** (`hs.eventtap.keyStroke`, 2026-10-25, Reduce
+  Motion on). From the keystroke until `allWindows()` shows a window on the
+  new space: **~1.7 s** for a relative step (⌥⇧K/J), **~1.0 s** for a direct
+  ⌃N. `focusedSpace()` can change earlier. **`hs.spaces.watcher` missed 2 of
+  4 switches**, so a refresh must poll `allWindows()` for windows on the new
+  space, with a timeout for empty desktops, not wait on the watcher.
+  Sweep cost: ~1.7 s per desktop stepping, ~1 s per direct jump.
+  **Multi-monitor, to check with a second screen:** with "Displays have
+  separate Spaces", every display's current space is visible already, so only
+  hidden spaces need a visit; "Move left/right" acts on the focused display,
+  so a sweep runs per display; does "Switch to Desktop N" number per display
+  or across all of them?
 - **To do: script layer 0 instead of README manual steps.** `bootstrap.sh`
   only symlinks. Keyboard Shortcuts rows (input source, desktop switching)
   can be written with `defaults write com.apple.symbolichotkeys` +
