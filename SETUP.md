@@ -485,6 +485,22 @@ collide and something has to move. That is a real cost of the modifier choice in
        firmware** (§8 2026-08-30: there is no QMK keycode for Apple's Globe,
        and layer 0 is the per-device OS remap of what the device sends).
        Firmware "caps → fn" would break the nav layer on the Zeal60.
+     - **Idea to evaluate (user, 2026-10-25): firmware caps → Esc, OS Esc → fn.**
+       The Zeal60 would send Esc from the caps position, so on any machine
+       without this setup, vim still gets Escape. On this machine, Esc from
+       *that device only* would become fn, and the nav layer works as today.
+       Sound in principle. Unknowns:
+       (a) the Modifier Keys pane only takes modifiers as the **source**, so
+       Esc → fn needs `hidutil property --matching '{"ProductID":…}' --set
+       '{"UserKeyMapping":[…]}'` per device. Check that it needs no admin,
+       and persist it with a LaunchAgent in `~/Library/LaunchAgents`;
+       (b) whether `hidutil` can target Apple's fn usage
+       (`0xFF00000003`);
+       (c) whether a hidutil-made fn still produces the lone-tap keycode 179
+       that Escape depends on (§4), and still survives "Press 🌐 key to: Do
+       Nothing".
+       If (c) fails, Escape-on-tap would need a timing heuristic, which §8
+       rules out. Probe before flashing anything.
   3. **Catching off-space windows from AX notifications.** AltTab's
      `src/windowserver/README.md` says AX notifications carry the window
      element without any space filter. Per-app `hs.axuielement.observer` on
