@@ -357,7 +357,7 @@ collide and something has to move. That is a real cost of the modifier choice in
 | Repo & Cowork workflow | **done** (2026-09-01) | config module structure | §0. `bootstrap.sh` applied 2026-10-25; `~/.hammerspoon` now links into the repo |
 | Window moving & resizing (halves) | **next** | architecture | primary window use case. **First question is which modifier** — see §7 |
 | Displays & multi-monitor | ready | architecture | must handle office/home monitor swap |
-| Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely |
+| Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely. 2026-10-25 on 27.0.1: `allSpaces`/`windowsForSpace`/`focusedSpace`/watcher work; **`moveWindowToSpace()` returns true but does not move the window**; `missionControlSpaceNames()` returns nil |
 | Window switching (focus) | **in progress** (target set 2026-10-25) | architecture | not a switcher: `` cmd+` `` cycling the app's windows **across spaces**, MRU. Findings re-verified; see §7 "Window cycling across spaces" |
 | Launcher & app switching | ready | architecture | Spotlight + direct-launch binds |
 | Zeal60 firmware & physical layout | ready | nav layer | modifier row parity, Esc/backtick position, QMK fn audit |
@@ -458,10 +458,18 @@ collide and something has to move. That is a real cost of the modifier choice in
     the fn tap shares. A last resort only.
   - Plain `hs.hotkey`, **no new event tap**.
 - **Open, in rough order:**
-  1. **What does native `` cmd+` `` do across spaces on 27.0.1**, and the
-     `cmd+tab` → ↓ combination (App Exposé) that shows an app's windows
-     across spaces? Test with two Chrome windows on different desktops
-     before replacing anything.
+  1. ~~What does native `` cmd+` `` do across spaces?~~ **Answered
+     2026-10-25.** Two Chrome windows were on desktops 1 and 2. Native
+     `` cmd+` `` does **nothing** with one window per space (no focus event
+     fired), so it is current-space only. App Exposé (`cmd+tab` → ↓) **does**
+     show both, because the Dock draws it with WindowServer access no
+     client gets. Reusing it would mean opening App Exposé and reading the
+     Dock's AX tree: visible, slow, and that tree already changed on 27
+     (`missionControlSpaceNames()` → nil). Rejected as a basis.
+     - Side finding: dragging a Chrome window produced a transient
+       **non-standard** Chrome window (no title, gone seconds later) that
+       still received a focus event. The cache must ignore `isStandard() ==
+       false`, or Chrome will fill it with junk.
   2. **Which key, exactly.** The user presses "the key left of 1". Bind by
      keycode, which does not change with input layout. But that key's
      keycode depends on the keyboard: on ISO hardware (CH built-in) it is
@@ -471,6 +479,12 @@ collide and something has to move. That is a real cost of the modifier choice in
      the character `` ` `` is an fn-chord (see the Zeal60 note below). Probe:
      log the keycode on each keyboard, then pick per-keyboard keycodes, or
      one binding plus firmware parity.
+     - **User plans Zeal60 firmware parity** (2026-10-25): Esc → `` ` `` and
+       MacBook modifier order. Then the key left of 1 matches on both
+       boards, and this mostly resolves. **Caps must stay stock Caps Lock in
+       firmware** (§8 2026-08-30: there is no QMK keycode for Apple's Globe,
+       and layer 0 is the per-device OS remap of what the device sends).
+       Firmware "caps → fn" would break the nav layer on the Zeal60.
   3. **Catching off-space windows from AX notifications.** AltTab's
      `src/windowserver/README.md` says AX notifications carry the window
      element without any space filter. Per-app `hs.axuielement.observer` on
