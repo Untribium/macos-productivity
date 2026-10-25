@@ -324,7 +324,7 @@ binding, no exceptions. Machine-readable counterpart:
 | `caps+shift+h/j/k/l` | select ← ↓ ↑ → | 1 | Hammerspoon | nav — free; modifiers pass through with fn stripped |
 | `caps+alt+h/l` | word ← → | 1 | Hammerspoon | nav — free, same mechanism |
 | `caps+space` | cycle input source (next, one direction) | 1 | Hammerspoon | **done** — re-emits hyper+space; OS shortcut holds the layout list |
-| `` cmd+` `` (key left of 1, keycode 50 here) | cycle the frontmost app's windows across spaces/displays, MRU; hold cmd to step, release commits; `cmd+shift` reverses | 2 | Hammerspoon `hs.hotkey` | **PoC** (2026-10-25) — `modules/wincycle.lua`; user-tested: gap after reload, fill by visit, toggle, 3-window step, reverse all as expected |
+| `` cmd+` `` (key left of 1, keycode 50 here) | cycle the frontmost app's windows across spaces/displays, MRU, **like cmd+tab**: each press selects, releasing cmd switches once; a quick tap toggles to the last window; holding (`overlayDelay`, 0.3 s) or a 2nd press shows a glass-style list (title, desktop) with the selection fixed at screen centre and the list sliding under it; the current window is selectable; `cmd+shift` reverses, Escape cancels | 2 | Hammerspoon `hs.hotkey` + `hs.canvas` | **PoC** (2026-10-25) — `modules/wincycle.lua`; `overlay = false` in `keymap.lua` gives the plain toggle |
 
 *(everything else pending the per-subtopic chats)*
 
@@ -642,6 +642,7 @@ Append-only. Each entry: what was decided, why, and what it rules out.
 | 2026-10-25 | **Correction to the `hs.ipc` row above:** the endpoints are a convenience and a narrow interface, **not a security boundary**. Added `hammerspoon://probe` and a gitignored `hammerspoon/probes/active.lua` probe runner | That row's rationale was overstated. The config itself is the way in: any process running as the user can write `.lua` into the watched directory, or edit it and relaunch Hammerspoon, and so already borrow the Accessibility grant. That is true of every Hammerspoon install and is not fixable without admin (a root-owned config); disabling the watcher only delays it. So running probe code from a file in the repo adds no exposure beyond the config. Real mitigations: grant Hammerspoon nothing beyond Accessibility; config changes are visible in git; review edits to `hammerspoon/`, including Claude's. | Disabling auto-reload as a security measure; `chflags uchg` (the user can clear it); treating `hs.ipc` as the main risk. `hs.ipc` stays out, because the endpoints are enough, not for security |
 | 2026-10-25 | Window switching target: **`` cmd+` `` cycles the frontmost app's windows across spaces and displays, MRU order**; minimized windows ignored; full screen out of scope. **No switcher or overlay**, at least initially | The real need is reaching the *other* window of the same app (Webex call ↔ chat, several Chrome windows) after spaces have moved under it. Per-app MRU covers that with a plain hotkey: no overlay, no modifier-release tap, no new event tap. The cache of captured handles plus `focusedWindow`/`mainWindow` was re-verified as sufficient, except for windows never seen since load. | `winswitch.lua`-style system-wide alt+tab switcher with overlay (for now); including minimized windows; full-screen support |
 | 2026-10-25 | **Exception to the `cmd` "do not take" row:** the key left of `1` (with `cmd`, and `cmd+shift` for reverse) is taken for window cycling, bound by **keycode**, not character | It replaces macOS's own window-cycling shortcut on the same key, so no app binding is lost. Keycodes are layout-independent, so switching CH/US input does not move the binding. Characters are not: `` ` `` lives on different physical keys per layout and per ISO/ANSI hardware. | Binding by character (`hs.hotkey` with `` "`" ``); a new chord elsewhere just for the 60% before the keycode probe has run |
+| 2026-10-25 | **Partial revision of "no switcher or overlay":** window cycling switches **on cmd release** (cmd+tab model), and shows an overlay from the second press or after 0.3 s held. A quick tap still toggles with no overlay. Behind `overlay` in `keymap.lua` | With 5–7 windows of one app, stepping by focusing each window switched spaces on every press, which was slow and disorienting. Selecting without switching and switching once on release fixes that. A quick tap is unaffected. The overlay is `hs.canvas` styled after Liquid Glass but cannot blur (no Screen Recording). Still per-app only, not a system-wide switcher. | Focusing on every press; switching on the first press, then overlaying (two space switches); window thumbnails (need Screen Recording); a system-wide switcher (still out) |
 
 ---
 
@@ -806,7 +807,9 @@ return {
   -- characters, so switching input layout does not move it. 50 is that key
   -- on ANSI hardware (this machine's built-in). ISO hardware (CH) likely
   -- sends 10 there instead: check on the work machine.
-  wincycle = { mods = { "cmd" }, keycodes = { 50 } },
+  -- overlay = false gives a plain toggle/cycle with no list (switch on release
+  -- either way). The overlay shows on the 2nd press, or after overlayDelay s held.
+  wincycle = { mods = { "cmd" }, keycodes = { 50 }, overlay = true, overlayDelay = 0.3 },
 }
 ```
 
@@ -1128,10 +1131,13 @@ return M
 -- An entry is admitted only once it has a space (new windows briefly have
 -- none).
 --
--- Cycling: holding cmd and pressing the key steps through an MRU snapshot,
--- focusing as it goes. MRU is only updated when cmd is released, detected by
--- polling the modifiers while a cycle is open. That avoids a flagsChanged
--- event tap (SETUP.md §8: one tap owns fn).
+-- Cycling works like cmd+tab: each press only SELECTS from an MRU snapshot;
+-- releasing cmd focuses the selection, once, and commits it as MRU. A quick
+-- tap therefore toggles to the last-used window with no overlay. From the
+-- second press, or once cmd has been held for overlayDelay, an overlay lists
+-- the windows (title, desktop) and further presses move the highlight. Escape cancels. Release
+-- is detected by polling the modifiers every 20 ms while a cycle is open.
+-- That avoids a flagsChanged event tap (SETUP.md §8: one tap owns fn).
 
 local diag = require("modules.diag")
 local log  = diag.logger("wincycle")
@@ -1210,15 +1216,190 @@ local function observe(app)
 end
 
 ---------------------------------------------------------------------------
--- cycling
+-- cycling: every press selects, releasing cmd switches (like cmd+tab)
 ---------------------------------------------------------------------------
 
-local function endCycle()
+M.overlayEnabled = true   -- set from spec.overlay
+M.overlayDelay   = 0.3    -- set from spec.overlayDelay (seconds)
+
+-- "desktop N" by position in allSpaces() order; display index added when
+-- there is more than one display
+local function spaceLabel(id)
+  local sp = spacesOf(id)[1]
+  if not sp then return "?" end
+  local screens, label = 0, nil
+  for uuid, list in pairs(hs.spaces.allSpaces() or {}) do
+    screens = screens + 1
+    for i, sid in ipairs(list) do
+      if sid == sp then label = { screen = uuid, n = i } end
+    end
+  end
+  if not label then return "?" end
+  if screens > 1 then
+    for i, scr in ipairs(hs.screen.allScreens()) do
+      if scr:getUUID() == label.screen then return ("display %d · desktop %d"):format(i, label.n) end
+    end
+  end
+  return ("desktop %d"):format(label.n)
+end
+
+-- Overlay geometry. The canvas is larger than the panel by MARGIN on every
+-- side so the panel's shadow has room to fall.
+local MARGIN, W, HEAD, ROW_H, PAD, RADIUS = 40, 600, 52, 30, 10, 24
+local HL = 2   -- element index of the selection pill; see place()
+
+-- Approximates Liquid Glass: translucent body, top sheen, bright rim, a glass
+-- pill for the selection. Real glass blurs/refracts what is behind the window;
+-- a canvas cannot sample the screen without Screen Recording (not granted).
+local function palette(style)
+  if (style or hs.host.interfaceStyle()) == "Dark" then
+    return { body = { white = 0.10, alpha = 0.78 }, sheen = { white = 1, alpha = 0.16 },
+             rim = { white = 1, alpha = 0.22 }, pillTop = { white = 1, alpha = 0.30 },
+             pillBottom = { white = 1, alpha = 0.14 }, pillRim = { white = 1, alpha = 0.45 },
+             text = { white = 1, alpha = 0.96 }, dim = { white = 1, alpha = 0.55 },
+             sep = { white = 1, alpha = 0.10 }, shadow = { white = 0, alpha = 0.45 } }
+  end
+  return { body = { white = 0.97, alpha = 0.82 }, sheen = { white = 1, alpha = 0.60 },
+           rim = { white = 1, alpha = 0.75 }, pillTop = { white = 1, alpha = 0.85 },
+           pillBottom = { white = 0.80, alpha = 0.55 }, pillRim = { white = 1, alpha = 0.95 },
+           text = { white = 0, alpha = 0.88 }, dim = { white = 0, alpha = 0.50 },
+           sep = { white = 0, alpha = 0.08 }, shadow = { white = 0, alpha = 0.28 } }
+end
+
+local CLEAR = { white = 1, alpha = 0 }
+
+-- rows: { { title = , label = } }, idx: selected row, app: { name, bundleID },
+-- frame: the screen frame to centre on, style: "Dark"/"Light" to override the
+-- system appearance (previews). Returns canvas, x, y, centreY.
+-- Pure drawing, no cycle state, so it can be rendered offscreen to a file.
+function M.buildOverlay(rows, idx, app, frame, style)
+  local P = palette(style)
+  local panelH = HEAD + PAD * 2 + ROW_H * #rows
+  local cw, ch = W + 2 * MARGIN, panelH + 2 * MARGIN
+  local rowTop = MARGIN + HEAD + PAD
+  local centreY = frame.y + frame.h / 2
+  local x = frame.x + (frame.w - cw) / 2
+  local y = centreY - (rowTop + (idx - 1) * ROW_H + ROW_H / 2)
+  local panel = { x = MARGIN, y = MARGIN, w = W, h = panelH }
+  local radii = { xRadius = RADIUS, yRadius = RADIUS }
+
+  local c = hs.canvas.new({ x = x, y = y, w = cw, h = ch })
+  c[1] = { type = "rectangle", action = "fill", frame = panel, roundedRectRadii = radii,
+           fillColor = P.body, withShadow = true,
+           shadow = { blurRadius = 36, color = P.shadow, offset = { w = 0, h = -14 } } }
+  c[HL] = { type = "rectangle", action = "strokeAndFill",
+            frame = { x = MARGIN + 8, y = rowTop + (idx - 1) * ROW_H, w = W - 16, h = ROW_H },
+            roundedRectRadii = { xRadius = 12, yRadius = 12 },
+            fillGradient = "linear", fillGradientAngle = 90,
+            fillGradientColors = { P.pillBottom, P.pillTop },
+            strokeColor = P.pillRim, strokeWidth = 1 }
+  c[3] = { type = "rectangle", action = "fill", frame = panel, roundedRectRadii = radii,
+           fillGradient = "linear", fillGradientAngle = 90,
+           fillGradientColors = { CLEAR, CLEAR, P.sheen } }   -- evenly spaced: sheen on the top third
+  c[4] = { type = "rectangle", action = "stroke", roundedRectRadii = radii,
+           frame = { x = MARGIN + 0.5, y = MARGIN + 0.5, w = W - 1, h = panelH - 1 },
+           strokeColor = P.rim, strokeWidth = 1 }
+
+  local icon = app.bundleID and hs.image.imageFromAppBundle(app.bundleID)
+  if icon then
+    c[#c + 1] = { type = "image", image = icon, imageScaling = "scaleProportionally",
+                  frame = { x = MARGIN + 18, y = MARGIN + 12, w = 30, h = 30 } }
+  end
+  c[#c + 1] = { type = "text", text = app.name or "?", textFont = ".AppleSystemUIFontDemi",
+                textSize = 16, textColor = P.text,
+                frame = { x = MARGIN + 58, y = MARGIN + 16, w = W - 200, h = 24 } }
+  c[#c + 1] = { type = "text", text = ("%d windows"):format(#rows), textSize = 12,
+                textFont = ".AppleSystemUIFont", textColor = P.dim, textAlignment = "right",
+                frame = { x = MARGIN + W - 160, y = MARGIN + 19, w = 140, h = 20 } }
+  c[#c + 1] = { type = "rectangle", action = "fill", fillColor = P.sep,
+                frame = { x = MARGIN + 16, y = MARGIN + HEAD, w = W - 32, h = 1 } }
+
+  for i, r in ipairs(rows) do
+    local ry = rowTop + (i - 1) * ROW_H + 6
+    c[#c + 1] = { type = "text", text = r.title, textFont = ".AppleSystemUIFont", textSize = 14,
+                  textColor = P.text, textLineBreak = "truncateTail",
+                  frame = { x = MARGIN + 24, y = ry, w = W - 48 - 150, h = ROW_H - 6 } }
+    c[#c + 1] = { type = "text", text = r.label, textFont = ".AppleSystemUIFont", textSize = 12,
+                  textColor = P.dim, textAlignment = "right",
+                  frame = { x = MARGIN + W - 24 - 150, y = ry + 1, w = 150, h = ROW_H - 6 } }
+  end
+  return c, x, y, centreY
+end
+
+local function hideOverlay()
+  if M.slide then M.slide:stop(); M.slide = nil end
+  if M.canvas then M.canvas:delete(); M.canvas = nil end
+  M.lastY = nil
+  if M.modal then M.modal:exit() end
+end
+
+-- The selected row stays at the screen's vertical centre; the list slides
+-- underneath it. Animate from the previous position over ~90 ms.
+local SLIDE_STEPS, SLIDE_DT = 6, 0.015
+
+-- The pill is re-placed every frame so that, on screen, it stays on the
+-- centre line while the rows move under it.
+local function place(c, x, y, centreY)
+  c:topLeft({ x = x, y = y })
+  c[HL].frame = { x = MARGIN + 8, y = centreY - y - ROW_H / 2, w = W - 16, h = ROW_H }
+end
+
+local function slideTo(c, x, y, centreY)
+  if M.slide then M.slide:stop(); M.slide = nil end
+  local from = M.lastY or y
+  M.lastY = y
+  if from == y then return place(c, x, y, centreY) end
+  local i = 0
+  place(c, x, from, centreY)
+  M.slide = hs.timer.doEvery(SLIDE_DT, function()
+    i = i + 1
+    local t = i / SLIDE_STEPS
+    t = 1 - (1 - t) * (1 - t)                     -- ease out
+    place(c, x, from + (y - from) * t, centreY)
+    if i >= SLIDE_STEPS then M.slide:stop(); M.slide = nil end
+  end)
+end
+
+local function drawOverlay()
+  local rows = {}
+  for i, e in ipairs(cycle.list) do
+    local title = safe(e.win.title, e.win) or ""
+    rows[i] = { title = title ~= "" and title or "(untitled)",
+                label = spaceLabel(safe(e.win.id, e.win) or 0) }
+  end
+  local app = hs.application.applicationForPID(cycle.pid)
+  local c, x, y, centreY = M.buildOverlay(rows, cycle.idx,
+    { name = app and app:name(), bundleID = app and app:bundleID() },
+    hs.screen.mainScreen():frame())
+  c:level(hs.canvas.windowLevels.overlay)
+  if M.slide then M.slide:stop(); M.slide = nil end
+  if M.canvas then M.canvas:delete() end
+  M.canvas = c:show()
+  slideTo(c, x, y, centreY)
+end
+
+-- release (or cancel): focus the selection, skipping entries that died
+local function finish(cancelled)
   if not cycle then return end
-  if cycle.poll then cycle.poll:stop() end
-  local e = cycle.list[cycle.idx]
+  local c = cycle
   cycle = nil
-  if e then e.seen = now() end   -- commit: the landed-on window becomes MRU
+  if c.poll then c.poll:stop() end
+  if c.delay then c.delay:stop() end
+  hideOverlay()
+  if cancelled then return log.i("%s: cancelled", c.list[1].app) end
+  if c.idx == 1 then return log.i("%s: stayed on current window", c.list[1].app) end
+  local n = #c.list
+  for k = 0, n - 1 do
+    local i = ((c.idx - 1 + k) % n) + 1
+    if i == 1 then break end                 -- wrapped back to the current window
+    local e = c.list[i]
+    local id = safe(e.win.id, e.win)
+    if id and #spacesOf(id) > 0 and pcall(e.win.focus, e.win) then
+      e.seen = now()   -- commit: the chosen window becomes MRU
+      return log.i("%s → %d (%d/%d) %s after %d press(es)", e.app, id, i, n, spaceLabel(id), c.presses)
+    end
+    if id then cache[id] = nil end
+  end
 end
 
 local function startCycle(app, focusedId)
@@ -1229,7 +1410,7 @@ local function startCycle(app, focusedId)
   touch(app:focusedWindow()); touch(app:mainWindow())
 
   local list = {}
-  for id, e in pairs(cache) do
+  for _, e in pairs(cache) do
     if e.pid == pid and safe(e.win.isMinimized, e.win) ~= true then list[#list + 1] = e end
   end
   -- the focused window goes first regardless of its counter
@@ -1240,48 +1421,52 @@ local function startCycle(app, focusedId)
   end)
   if #list < 2 then return log.i("%s: %d window(s) known, nothing to cycle", app:name(), #list) end
 
-  cycle = { list = list, idx = 1, pid = pid }
-  cycle.poll = hs.timer.doEvery(0.05, function()
-    if not hs.eventtap.checkKeyboardModifiers().cmd then endCycle() end
+  cycle = { list = list, idx = 1, pid = pid, presses = 0 }
+  cycle.poll = hs.timer.doEvery(0.02, function()
+    if not hs.eventtap.checkKeyboardModifiers().cmd then finish(false) end
   end)
   return true
 end
 
-local function ms(t0) return (hs.timer.absoluteTime() - t0) / 1e6 end
-
 local function step(delta)
-  local t0 = hs.timer.absoluteTime()
   local app = hs.application.frontmostApplication()
   if not app then return end
-  if cycle and cycle.pid ~= app:pid() then endCycle() end
-  local tSnap = 0
+  if cycle and cycle.pid ~= app:pid() then finish(true) end
   if not cycle then
     local fw = hs.window.focusedWindow()
     if not startCycle(app, fw and fw:id()) then return end
-    tSnap = ms(t0)
   end
-  local tFocus0 = hs.timer.absoluteTime()
+  cycle.presses = cycle.presses + 1
   local n = #cycle.list
-  for _ = 1, n do                       -- skip entries that died mid-cycle
-    cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
-    local e = cycle.list[cycle.idx]
-    local id = safe(e.win.id, e.win)
-    if id and #spacesOf(id) > 0 and pcall(e.win.focus, e.win) then
-      log.i("%s → %d (%d/%d) on space %s  [snapshot %.0fms, focus %.0fms, total %.0fms]",
-            e.app, id, cycle.idx, n, hs.inspect(spacesOf(id)), tSnap, ms(tFocus0), ms(t0))
-      return
-    end
-    if id then cache[id] = nil end
+  cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
+  if not M.overlayEnabled then return end
+  -- overlay on the second press, or once cmd has been held for overlayDelay;
+  -- a quick tap releases first and never sees it
+  local function show()
+    if not cycle then return end
+    drawOverlay()
+    if M.modal then M.modal:enter() end
   end
-  endCycle()
+  if cycle.presses >= 2 or M.canvas then
+    if cycle.delay then cycle.delay:stop(); cycle.delay = nil end
+    show()
+  elseif not cycle.delay then
+    cycle.delay = hs.timer.doAfter(M.overlayDelay, show)
+  end
 end
 
 ---------------------------------------------------------------------------
 -- wiring
 ---------------------------------------------------------------------------
 
--- spec: { mods = {"cmd"}, keycodes = { 50 } } from config/keymap.lua
+-- spec: { mods = {"cmd"}, keycodes = { 50 }, overlay = true } from config/keymap.lua
 function M.start(spec)
+  M.overlayEnabled = spec.overlay ~= false
+  M.overlayDelay   = spec.overlayDelay or M.overlayDelay
+  -- Escape cancels while the overlay is up (with or without cmd still held)
+  M.modal = hs.hotkey.modal.new()
+  M.modal:bind({}, "escape", function() finish(true) end)
+  M.modal:bind({ "cmd" }, "escape", function() finish(true) end)
   M.wf = hs.window.filter.new(false):setDefaultFilter({})
   M.wf:subscribe(hs.window.filter.windowFocused, function(w) touch(w, true) end)
   M.wf:subscribe({ hs.window.filter.windowCreated, hs.window.filter.windowVisible,

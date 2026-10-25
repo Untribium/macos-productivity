@@ -41,5 +41,7 @@ return {
   -- characters, so switching input layout does not move it. 50 is that key
   -- on ANSI hardware (this machine's built-in). ISO hardware (CH) likely
   -- sends 10 there instead: check on the work machine.
-  wincycle = { mods = { "cmd" }, keycodes = { 50 } },
+  -- overlay = false gives a plain toggle/cycle with no list (switch on release
+  -- either way). The overlay shows on the 2nd press, or after overlayDelay s held.
+  wincycle = { mods = { "cmd" }, keycodes = { 50 }, overlay = true, overlayDelay = 0.3 },
 }
