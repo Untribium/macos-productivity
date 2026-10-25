@@ -519,8 +519,12 @@ collide and something has to move. That is a real cost of the modifier choice in
      unseen. Ids carry no owner (`hs.window.list` is on-screen only), so the
      signal is per space, not per app. If built, surface it as **a
      notification with a "refresh" button** that steps through the affected
-     spaces and returns. **Never automatic.** Needs probes: are noise ids
-     stable off-space, and do synthetic ⌃N presses switch reliably?
+     spaces and returns. **Never automatic.** Noise stability **checked
+     2026-10-25**: over 23 min, unvisited spaces kept identical id sets. The
+     one change was Chrome's non-standard companion window 3738 following
+     its real window 3736 from space 6 to 7. So **classify ids system-wide,
+     not per space**, or a moved window's companion looks like an unknown
+     window. Still open: do synthetic ⌃N presses switch reliably?
 
 **Input source switching — resolved, with a trap worth remembering**
 
