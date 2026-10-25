@@ -501,16 +501,19 @@ collide and something has to move. That is a real cost of the modifier choice in
        Nothing".
        If (c) fails, Escape-on-tap would need a timing heuristic, which §8
        rules out. Probe before flashing anything.
-  3. **Catching off-space windows from AX notifications.** AltTab's
-     `src/windowserver/README.md` says AX notifications carry the window
-     element without any space filter. Per-app `hs.axuielement.observer` on
-     the frontmost app would then fill the cache whenever an off-space
-     window announces something. Probe it.
+  3. ~~Catching off-space windows from AX notifications.~~ **Confirmed
+     2026-10-25** (`docs/verification/2026-10-25-ax-notifications-and-id-reuse.md`).
+     A per-app `hs.axuielement.observer` on the application element received
+     `AXTitleChanged` for a Chrome window on another space and resolved it to
+     a usable handle, which `focus()` then switched to. The probe never
+     enumerated that window. So the cache fills from any window that changes,
+     and the gap shrinks to windows that stay completely static.
   4. **Webex.** Are the call and chat windows the same process? If not,
      "same app" will not link them. Probe with a free account on this
      machine, after Chrome works.
-  5. **Window id reuse after app restart** (attic finding 4), for cache
-     pruning.
+  5. ~~Window id reuse after app restart~~ **Not reused** in one trial
+     (TextEdit 26141, then 26150 after a restart; ids grow monotonically all
+     session). Prune closed windows, but no defence against reuse is needed.
   6. **Later: detecting unknown windows.** Learn each space's non-window ids
      on visit; afterwards, a new unclassified id means a window opened there
      unseen. Ids carry no owner (`hs.window.list` is on-screen only), so the

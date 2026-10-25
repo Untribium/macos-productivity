@@ -15,10 +15,10 @@ principles on macOS 27.0.1 (2026-10-25, `docs/verification/2026-10-25-*`):
 
 | # | Finding | Re-check |
 |---|---|---|
-| 1 | no API lists windows on inactive spaces | **holds, with an exception**: `app:focusedWindow()`/`mainWindow()` reach one window per app off-space. AppKit space-filters `kAXWindows`; a macOS limit, not a Hammerspoon bug |
+| 1 | no API lists windows on inactive spaces | **holds, with two exceptions**: `app:focusedWindow()`/`mainWindow()` reach one window per app off-space; **AX notifications** hand over any off-space window that changes. AppKit space-filters `kAXWindows`; a macOS limit, not a Hammerspoon bug |
 | 2 | captured handles stay valid off-space | **holds** |
 | 3 | `windowsForSpace()` lists ids across spaces | **holds**, but ids include non-window surfaces; only useful cross-referenced |
-| 4 | ids are reused after app restart | **not yet re-checked** |
+| 4 | ids are reused after app restart | **does not hold** in one trial: ids grow monotonically per login session |
 | 5 | `focus()` off-space switches space | **holds**; no `gotoSpace` needed |
 | 6 | modifier-release commit needs a tap | **moot** for the cmd+` target (no overlay) |
 
