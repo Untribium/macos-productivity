@@ -136,7 +136,8 @@ local HL = 3   -- element index of the selection pill (above the sheen); see pla
 
 -- Approximates Liquid Glass: translucent body, top sheen, bright rim. Real glass blurs/refracts what is behind the window;
 -- a canvas cannot sample the screen without Screen Recording (not granted).
--- The selection is a flat accent-coloured pill, like a native macOS selection.
+-- The selection is a flat accent-coloured pill, like a native macOS selection;
+-- accent and light/dark are read on every draw, so a settings change shows at once.
 local function palette(style)
   if (style or hs.host.interfaceStyle()) == "Dark" then
     return { body = { white = 0.10, alpha = 0.78 }, sheen = { white = 1, alpha = 0.16 },
@@ -152,11 +153,23 @@ end
 
 local CLEAR = { white = 1, alpha = 0 }
 
+-- Text colour for the selected row: white or near-black, whichever has the
+-- higher WCAG contrast against the pill. White on blue, dark on light
+-- accents such as green or yellow.
+local function onAccent(c)
+  local function lin(v) return v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4 end
+  local L = 0.2126 * lin(c.red) + 0.7152 * lin(c.green) + 0.0722 * lin(c.blue)
+  local vsWhite, vsBlack = 1.05 / (L + 0.05), (L + 0.05) / 0.05
+  if vsWhite >= vsBlack then return { white = 1 }, { white = 1, alpha = 0.85 } end
+  return { white = 0, alpha = 0.9 }, { white = 0, alpha = 0.65 }
+end
+
 -- rows: { { title = , label = } }, idx: selected row, app: { name, bundleID },
--- frame: the screen frame to centre on, style: "Dark"/"Light" to override the
--- system appearance (previews). Returns canvas, x, y, centreY.
+-- frame: the screen frame to centre on. style ("Dark"/"Light") and accent (a
+-- colour table) override the system appearance, for previews.
+-- Returns canvas, x, y, centreY.
 -- Pure drawing, no cycle state, so it can be rendered offscreen to a file.
-function M.buildOverlay(rows, idx, app, frame, style)
+function M.buildOverlay(rows, idx, app, frame, style, accent)
   local P = palette(style)
   local panelH = HEAD + PAD * 2 + ROW_H * #rows
   local cw, ch = W + 2 * MARGIN, panelH + 2 * MARGIN
@@ -176,12 +189,13 @@ function M.buildOverlay(rows, idx, app, frame, style)
            fillGradientColors = { CLEAR, CLEAR, P.sheen } }   -- evenly spaced: sheen on the top third
   -- the selection is the system accent colour (System Settings → Appearance),
   -- read on every draw so a change applies at once; flat, no gradient
-  local accent = hs.drawing.color.lists()["System"]["controlAccentColor"]
+  accent = accent or hs.drawing.color.lists()["System"]["controlAccentColor"]
   c[HL] = { type = "rectangle", action = "strokeAndFill",
             frame = { x = MARGIN + 8, y = rowTop + (idx - 1) * ROW_H, w = W - 16, h = ROW_H },
             roundedRectRadii = { xRadius = 12, yRadius = 12 },
             fillColor = { red = accent.red, green = accent.green, blue = accent.blue, alpha = 0.85 },
             strokeColor = accent, strokeWidth = 1 }
+  local selText, selDim = onAccent(accent)
   c[4] = { type = "rectangle", action = "stroke", roundedRectRadii = radii,
            frame = { x = MARGIN + 0.5, y = MARGIN + 0.5, w = W - 1, h = panelH - 1 },
            strokeColor = P.rim, strokeWidth = 1 }
@@ -204,10 +218,10 @@ function M.buildOverlay(rows, idx, app, frame, style)
     local ry = rowTop + (i - 1) * ROW_H + 6
     local sel = (i == idx)
     c[#c + 1] = { type = "text", text = r.title, textFont = ".AppleSystemUIFont", textSize = 14,
-                  textColor = sel and { white = 1 } or P.text, textLineBreak = "truncateTail",
+                  textColor = sel and selText or P.text, textLineBreak = "truncateTail",
                   frame = { x = MARGIN + 24, y = ry, w = W - 48 - 150, h = ROW_H - 6 } }
     c[#c + 1] = { type = "text", text = r.label, textFont = ".AppleSystemUIFont", textSize = 12,
-                  textColor = sel and { white = 1, alpha = 0.85 } or P.dim, textAlignment = "right",
+                  textColor = sel and selDim or P.dim, textAlignment = "right",
                   frame = { x = MARGIN + W - 24 - 150, y = ry + 1, w = 150, h = ROW_H - 6 } }
   end
   return c, x, y, centreY
