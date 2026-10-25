@@ -4,30 +4,24 @@
 -- running as this user execute arbitrary Lua, and so borrow Hammerspoon's
 -- Accessibility grant (keylogging, synthetic input). These endpoints take no
 -- parameters and do one fixed thing each, so the worst a hostile caller can
--- do is trigger a reload or rewrite the status file.
+-- do is trigger a reload or rewrite the files in .live/.
 --
 --   open -g hammerspoon://reload   reload the config
---   open -g hammerspoon://status   rewrite the status file
+--   open -g hammerspoon://status   rewrite .live/status.json and .live/console.txt
 --
--- The status file is also written on every load, so a changed `loaded` time
--- is how a caller confirms a reload actually happened.
+-- Both files are also written on every load, so a changed `loaded` time is how
+-- a caller confirms a reload actually happened. Module state comes from
+-- diag.provide(); see modules/diag.lua.
 --
 -- RULE: never add an endpoint that reads its params, evaluates anything, or
--- writes anywhere but the status file. That would make this hs.ipc again.
+-- writes outside .live/. That would make this hs.ipc again.
+
+local diag = require("modules.diag")
+local log  = diag.logger("urlctl")
 
 local M = {}
 
-local function sortedNames(byKeycode)
-  local out = {}
-  for kc in pairs(byKeycode or {}) do
-    out[#out + 1] = hs.keycodes.map[kc] or tostring(kc)
-  end
-  table.sort(out)
-  return out
-end
-
 local function writeStatus(ctx, reason)
-  local tap = ctx.fnlayer.tap
   local status = {
     reason        = reason,
     loaded        = M.loadedAt,
@@ -36,22 +30,27 @@ local function writeStatus(ctx, reason)
     configdir     = hs.configdir,
     watching      = ctx.root,
     accessibility = hs.accessibilityState(),
-    fnTap         = tap and tap:isEnabled() or false,
-    fnBindings    = sortedNames(ctx.fnlayer.bindings),
+    modules       = diag.collect(),
   }
-  local f, err = io.open(ctx.statusFile, "w")
-  if not f then
-    hs.printf("urlctl: cannot write %s: %s", ctx.statusFile, err)
-    return
+  local ok, json = pcall(hs.json.encode, status, true)
+  if not ok then
+    -- a provider returned something unencodable; still say so in the file
+    json = hs.json.encode({ reason = reason, written = status.written,
+                            error = "status not encodable: " .. tostring(json) }, true)
   end
-  f:write(hs.json.encode(status, true), "\n")
+  local path = diag.dir .. "/status.json"
+  local f, err = io.open(path, "w")
+  if not f then return log.e("cannot write %s: %s", path, err) end
+  f:write(json, "\n")
   f:close()
+  diag.dumpConsole()
 end
 
--- ctx: { root = watched dir, statusFile = path, fnlayer = module }
+-- ctx: { root = watched dir }. Call after every other module has started, so
+-- the load-time status includes their providers.
 function M.start(ctx)
   M.loadedAt = os.date("%Y-%m-%dT%H:%M:%S")
-  hs.urlevent.bind("reload", function() hs.reload() end)
+  hs.urlevent.bind("reload", function() log.i("reload requested"); hs.reload() end)
   hs.urlevent.bind("status", function() writeStatus(ctx, "requested") end)
   writeStatus(ctx, "load")
 end

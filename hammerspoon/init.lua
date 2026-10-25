@@ -11,11 +11,6 @@
 --   3. Keyboard Shortcuts → Input Sources → "Select next source in Input menu"
 --      = ⌃⌥⇧⌘Space, and the "previous source" row CLEARED, not just unchecked
 
-local keymap  = require("config.keymap")
-local fnlayer = require("modules.fnlayer")
-
-fnlayer.start(keymap.fn)
-
 -- Auto-reload on config change.
 --
 -- hs.configdir is ~/.hammerspoon, whose entries are symlinks into the repo.
@@ -37,6 +32,9 @@ local function configRoot()
 end
 
 local root = configRoot()
+
+-- Watcher before any module loads: if one errors, the rest of this file
+-- never runs, and a fix should still reload without a trip to the menu.
 configWatcher = hs.pathwatcher.new(root, function(paths)
   for _, p in ipairs(paths) do
     if p:sub(-4) == ".lua" then hs.reload() return end
@@ -44,13 +42,21 @@ configWatcher = hs.pathwatcher.new(root, function(paths)
 end)
 configWatcher:start()
 
+-- Diagnostics first, so every module's load-time warnings reach .live/log.txt.
+-- .live/ sits at the repo root, outside the watched directory, so writing it
+-- cannot trigger a reload. Gitignored. See modules/diag.lua.
+local diag = require("modules.diag")
+diag.setup(root .. "/../.live")
+diag.logger("init").i("loading, watching %s", root)
+
+local keymap  = require("config.keymap")
+local fnlayer = require("modules.fnlayer")
+
+fnlayer.start(keymap.fn)
+
 -- hammerspoon://reload and hammerspoon://status. Fixed endpoints only, never
--- hs.ipc (SETUP.md §8). The status file sits at the repo root, outside the
--- watched directory, so writing it cannot trigger a reload. It is gitignored.
-require("modules.urlctl").start({
-  root       = root,
-  statusFile = root .. "/../.live-status.json",
-  fnlayer    = fnlayer,
-})
+-- hs.ipc (SETUP.md §8). Started last so the load-time status sees every
+-- module's provider.
+require("modules.urlctl").start({ root = root })
 
 hs.notify.show("Hammerspoon", "", "config loaded — " .. root)

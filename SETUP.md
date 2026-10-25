@@ -81,13 +81,18 @@ fixed `hammerspoon://` endpoints in `modules/urlctl.lua`:
 
 ```sh
 open -g hammerspoon://reload    # reload the config
-open -g hammerspoon://status    # rewrite <repo>/.live-status.json
-cat .live-status.json           # watched dir, fn tap state, bound keys, AX grant
+open -g hammerspoon://status    # rewrite .live/status.json and .live/console.txt
+cat .live/status.json           # watched dir, AX grant, one section per module
+tail .live/log.txt              # diag.logger() lines, kept across reloads
+grep -n ERROR .live/console.txt # errors and stack traces from callbacks
 ```
 
-The status file is rewritten on every load, so a newer `loaded` time confirms a
-reload happened. Keypress behaviour still needs a person at the keyboard. There
-is deliberately **no `hs.ipc`** (§8), so `hs -c` does not work.
+`.live/` (gitignored, `modules/diag.lua`) is output only. Status and console are
+rewritten on every load, so a newer `loaded` time confirms a reload happened.
+Modules add their own state to the status file with `diag.provide()`; that
+is how a window cache gets inspected without a console. Keypresses and
+judging what is on screen still need a person. There is deliberately
+**no `hs.ipc`** (§8), so `hs -c` does not work.
 
 **Session shape (default):**
 
@@ -502,6 +507,7 @@ Append-only. Each entry: what was decided, why, and what it rules out.
 | 2026-09-01 | macOS-side facts are gathered as **probes**: user runs the command, output is filed in `docs/verification/` | A Cowork session's shell is a Linux VM with only this folder mounted — `defaults`, `hs`, and System Settings are all unreachable from it. Writing probes down as artefacts stops each session re-asking the same question. | Any workflow that assumes a session can inspect the running macOS |
 | 2026-10-25 | Pre-repo `winswitch.lua` (alt+tab cross-space MRU switcher) **retired** to `docs/attic/`, not brought into the config | It was never designed against this document (no §4/§5 rows, a second event tap) and is not the switching behaviour wanted. Its findings about off-space window handles are recorded in `docs/attic/README.md` for the window-switching subtopic. | Reviving `winswitch.lua` as the starting design; `alt+tab`/`` alt+` `` as implicitly taken |
 | 2026-10-25 | Hammerspoon is driven from the shell through **fixed `hammerspoon://` URL endpoints** (`reload`, `status`), never `hs.ipc` | `hs.ipc` lets any process running as the user run arbitrary Lua, and so borrow Hammerspoon's Accessibility grant for keylogging and synthetic input, which macOS would otherwise block per app. Parameterless endpoints cap the worst case at a reload or a rewritten status file, and still cover reloading and status checks from a native session. | `hs.ipc` / `hs -c`, except temporarily for one session and removed afterwards; endpoints that take params or evaluate input |
+| 2026-10-25 | Running-config diagnostics go to files in a gitignored `<repo>/.live/` (log, console dump, status with per-module `diag.provide()` sections); the config watcher starts before any module | A shell session cannot see the Hammerspoon console, and switcher work needs the window cache visible without one. Files are output only, so this adds observability without adding input surface. The watcher order means a module that fails to load can still be fixed by saving a file. | Debugging by asking the user to copy console text; module state exposed by evaluating Lua; synthetic keypresses from the shell (would need Accessibility for the terminal) |
 
 ---
 
@@ -516,7 +522,8 @@ what Hammerspoon reads; the arrow is the symlink `bootstrap.sh` creates.
 | `keymap.lua` | `hammerspoon/config/keymap.lua` | → `~/.hammerspoon/config/` | bindings as data; machine-readable twin of §5 |
 | `fnlayer.lua` | `hammerspoon/modules/fnlayer.lua` | → `~/.hammerspoon/modules/` | 1 — **sole owner of the fn tap** |
 | `bootstrap.sh` | `bootstrap.sh` | — | creates the three symlinks above; dry run by default |
-| `urlctl.lua` | `hammerspoon/modules/urlctl.lua` | → `~/.hammerspoon/modules/` | none — `hammerspoon://reload` and `://status` endpoints; writes the gitignored `.live-status.json` |
+| `urlctl.lua` | `hammerspoon/modules/urlctl.lua` | → `~/.hammerspoon/modules/` | none — `hammerspoon://reload` and `://status` endpoints; writes `.live/status.json` |
+| `diag.lua` | `hammerspoon/modules/diag.lua` | → `~/.hammerspoon/modules/` | none — `logger()` and `provide()` for modules; owns the gitignored `.live/` |
 | `docs/attic/*.lua` | `docs/attic/` | — *(not linked, not loaded)* | none — retired `winswitch.lua`, `capsnav.lua`, kept for learnings |
 | *(not in repo)* | — | `~/.hammerspoon/Spoons/` | Hammerspoon's own; gitignored, left alone by bootstrap |
 | *(GUI setting — not a file)* | README manual step 1 | System Settings → Keyboard → Modifier Keys, **per keyboard** | 0 |
@@ -555,11 +562,6 @@ re-verify by hand: `caps+hjkl`, lone-tap Escape, `caps+space`.**
 --   3. Keyboard Shortcuts → Input Sources → "Select next source in Input menu"
 --      = ⌃⌥⇧⌘Space, and the "previous source" row CLEARED, not just unchecked
 
-local keymap  = require("config.keymap")
-local fnlayer = require("modules.fnlayer")
-
-fnlayer.start(keymap.fn)
-
 -- Auto-reload on config change.
 --
 -- hs.configdir is ~/.hammerspoon, whose entries are symlinks into the repo.
@@ -581,6 +583,9 @@ local function configRoot()
 end
 
 local root = configRoot()
+
+-- Watcher before any module loads: if one errors, the rest of this file
+-- never runs, and a fix should still reload without a trip to the menu.
 configWatcher = hs.pathwatcher.new(root, function(paths)
   for _, p in ipairs(paths) do
     if p:sub(-4) == ".lua" then hs.reload() return end
@@ -588,14 +593,22 @@ configWatcher = hs.pathwatcher.new(root, function(paths)
 end)
 configWatcher:start()
 
+-- Diagnostics first, so every module's load-time warnings reach .live/log.txt.
+-- .live/ sits at the repo root, outside the watched directory, so writing it
+-- cannot trigger a reload. Gitignored. See modules/diag.lua.
+local diag = require("modules.diag")
+diag.setup(root .. "/../.live")
+diag.logger("init").i("loading, watching %s", root)
+
+local keymap  = require("config.keymap")
+local fnlayer = require("modules.fnlayer")
+
+fnlayer.start(keymap.fn)
+
 -- hammerspoon://reload and hammerspoon://status. Fixed endpoints only, never
--- hs.ipc (SETUP.md §8). The status file sits at the repo root, outside the
--- watched directory, so writing it cannot trigger a reload. It is gitignored.
-require("modules.urlctl").start({
-  root       = root,
-  statusFile = root .. "/../.live-status.json",
-  fnlayer    = fnlayer,
-})
+-- hs.ipc (SETUP.md §8). Started last so the load-time status sees every
+-- module's provider.
+require("modules.urlctl").start({ root = root })
 
 hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
 ```
@@ -653,6 +666,9 @@ return {
 -- registers here via config/keymap.lua. Anything NOT fn-based can use
 -- hs.hotkey instead, which needs no tap.
 
+local diag = require("modules.diag")
+local log  = diag.logger("fnlayer")
+
 local M = {}
 
 -- Synthetic keyDown macOS emits on a lone, unchorded Globe tap. Undocumented;
@@ -693,12 +709,11 @@ local function compile(keymap)
   for name, spec in pairs(keymap) do
     local kc = hs.keycodes.map[name]
     if not kc then
-      hs.printf("fnlayer: unknown source key %q — binding skipped", name)
+      log.w("unknown source key %q — binding skipped", name)
     elseif not (spec.key or spec.action) then
-      hs.printf("fnlayer: %q has neither key nor action — skipped", name)
+      log.w("%q has neither key nor action — skipped", name)
     elseif spec.key and not hs.keycodes.map[spec.key] then
-      hs.printf("fnlayer: %q → unknown destination key %q — skipped",
-                name, spec.key)
+      log.w("%q → unknown destination key %q — skipped", name, spec.key)
     else
       for _, m in ipairs(spec.mods or {}) do
         if m == "fn" then
@@ -714,7 +729,6 @@ end
 function M.start(keymap)
   if M.tap then M.tap:stop() end
   local bindings = compile(keymap)
-  M.bindings = bindings   -- read-only view for status reporting (urlctl)
 
   M.tap = hs.eventtap.new(
     { eventTypes.keyDown, eventTypes.keyUp },
@@ -755,11 +769,18 @@ function M.start(keymap)
   )
   M.tap:start()
 
+  diag.provide("fnlayer", function()
+    local names = {}
+    for kc in pairs(bindings) do names[#names + 1] = hs.keycodes.map[kc] or tostring(kc) end
+    table.sort(names)
+    return { tapEnabled = M.tap:isEnabled(), bindings = names }
+  end)
+
   -- macOS disables taps under load, after timeouts, and across sleep.
   if M.watchdog then M.watchdog:stop() end
   M.watchdog = hs.timer.doEvery(5, function()
     if M.tap and not M.tap:isEnabled() then
-      print("fnlayer: tap disabled — restarting")
+      log.w("tap disabled — restarting")
       M.tap:start()
     end
   end)
@@ -792,30 +813,24 @@ return M
 -- running as this user execute arbitrary Lua, and so borrow Hammerspoon's
 -- Accessibility grant (keylogging, synthetic input). These endpoints take no
 -- parameters and do one fixed thing each, so the worst a hostile caller can
--- do is trigger a reload or rewrite the status file.
+-- do is trigger a reload or rewrite the files in .live/.
 --
 --   open -g hammerspoon://reload   reload the config
---   open -g hammerspoon://status   rewrite the status file
+--   open -g hammerspoon://status   rewrite .live/status.json and .live/console.txt
 --
--- The status file is also written on every load, so a changed `loaded` time
--- is how a caller confirms a reload actually happened.
+-- Both files are also written on every load, so a changed `loaded` time is how
+-- a caller confirms a reload actually happened. Module state comes from
+-- diag.provide(); see modules/diag.lua.
 --
 -- RULE: never add an endpoint that reads its params, evaluates anything, or
--- writes anywhere but the status file. That would make this hs.ipc again.
+-- writes outside .live/. That would make this hs.ipc again.
+
+local diag = require("modules.diag")
+local log  = diag.logger("urlctl")
 
 local M = {}
 
-local function sortedNames(byKeycode)
-  local out = {}
-  for kc in pairs(byKeycode or {}) do
-    out[#out + 1] = hs.keycodes.map[kc] or tostring(kc)
-  end
-  table.sort(out)
-  return out
-end
-
 local function writeStatus(ctx, reason)
-  local tap = ctx.fnlayer.tap
   local status = {
     reason        = reason,
     loaded        = M.loadedAt,
@@ -824,24 +839,104 @@ local function writeStatus(ctx, reason)
     configdir     = hs.configdir,
     watching      = ctx.root,
     accessibility = hs.accessibilityState(),
-    fnTap         = tap and tap:isEnabled() or false,
-    fnBindings    = sortedNames(ctx.fnlayer.bindings),
+    modules       = diag.collect(),
   }
-  local f, err = io.open(ctx.statusFile, "w")
-  if not f then
-    hs.printf("urlctl: cannot write %s: %s", ctx.statusFile, err)
-    return
+  local ok, json = pcall(hs.json.encode, status, true)
+  if not ok then
+    -- a provider returned something unencodable; still say so in the file
+    json = hs.json.encode({ reason = reason, written = status.written,
+                            error = "status not encodable: " .. tostring(json) }, true)
   end
-  f:write(hs.json.encode(status, true), "\n")
+  local path = diag.dir .. "/status.json"
+  local f, err = io.open(path, "w")
+  if not f then return log.e("cannot write %s: %s", path, err) end
+  f:write(json, "\n")
   f:close()
+  diag.dumpConsole()
 end
 
--- ctx: { root = watched dir, statusFile = path, fnlayer = module }
+-- ctx: { root = watched dir }. Call after every other module has started, so
+-- the load-time status includes their providers.
 function M.start(ctx)
   M.loadedAt = os.date("%Y-%m-%dT%H:%M:%S")
-  hs.urlevent.bind("reload", function() hs.reload() end)
+  hs.urlevent.bind("reload", function() log.i("reload requested"); hs.reload() end)
   hs.urlevent.bind("status", function() writeStatus(ctx, "requested") end)
   writeStatus(ctx, "load")
+end
+
+return M
+```
+
+### `hammerspoon/modules/diag.lua`
+
+```lua
+-- modules/diag.lua — what a shell session can read about the running config.
+--
+-- Everything lands in <repo>/.live/ (gitignored), written by Hammerspoon and
+-- read by whoever is debugging. Output only: nothing here reads input.
+--
+--   log.txt      timestamped lines from diag.logger(), kept across reloads
+--   console.txt  the Hammerspoon console, dumped on load and on ://status
+--   status.json  written by urlctl; includes every provider registered here
+--
+-- Usage in a module:
+--   local diag = require("modules.diag")
+--   local log  = diag.logger("winswitch")
+--   log.i("cached %d windows", n)
+--   diag.provide("winswitch", function() return { cache = ... } end)
+--
+-- Providers must return plain data (tables, strings, numbers, booleans) that
+-- hs.json can encode. They run inside pcall, so one bad provider shows up as an
+-- error string in status.json rather than breaking the dump.
+
+local M = { providers = {} }
+
+local MAX_LOG = 1024 * 1024   -- rotate to log.txt.1 past this
+
+function M.setup(dir)
+  M.dir = dir
+  hs.fs.mkdir(dir)            -- returns nil if it already exists; that is fine
+end
+
+local function append(line)
+  if not M.dir then return end
+  local path = M.dir .. "/log.txt"
+  local attr = hs.fs.attributes(path)
+  if attr and attr.size > MAX_LOG then os.rename(path, path .. ".1") end
+  local f = io.open(path, "a")
+  if f then f:write(line, "\n"); f:close() end
+end
+
+-- Prints to the console as well, so nothing is lost if the file is unwritable.
+function M.logger(name)
+  local function level(tag)
+    return function(fmt, ...)
+      local msg = select("#", ...) > 0 and fmt:format(...) or fmt
+      local line = ("%s %s %s: %s"):format(os.date("%Y-%m-%dT%H:%M:%S"), tag, name, msg)
+      print(line)
+      append(line)
+    end
+  end
+  return { i = level("I"), w = level("W"), e = level("E"), d = level("D") }
+end
+
+function M.provide(name, fn) M.providers[name] = fn end
+
+function M.collect()
+  local out = {}
+  for name, fn in pairs(M.providers) do
+    local ok, v = pcall(fn)
+    out[name] = ok and v or ("provider error: " .. tostring(v))
+  end
+  return out
+end
+
+-- The console is where errors from callbacks end up, so this is how a shell
+-- session sees a stack trace.
+function M.dumpConsole()
+  if not M.dir then return end
+  local f = io.open(M.dir .. "/console.txt", "w")
+  if f then f:write(hs.console.getConsole() or "", "\n"); f:close() end
 end
 
 return M
@@ -869,8 +964,12 @@ return M
   the keymap** — a skipped binding looks identical to a broken one.
 - `configRoot()` in `init.lua` exists only because of the symlink install (§0).
   Under a copy install it is a no-op that returns `hs.configdir`.
-- `urlctl.lua` endpoints take no parameters on purpose (§8). The status file
-  lands at the repo root, outside the watched `hammerspoon/` directory, so
-  writing it cannot trigger a reload loop. If `configRoot()` ever falls back
-  to `hs.configdir`, the file lands in `~/` instead, so a missing
-  `.live-status.json` in the repo is itself a symptom.
+- `urlctl.lua` endpoints take no parameters on purpose (§8). `.live/` sits at
+  the repo root, outside the watched `hammerspoon/` directory, so writing it
+  cannot trigger a reload loop. If `configRoot()` ever falls back to
+  `hs.configdir`, it lands in `~/.live/` instead, so a stale `.live/` in the
+  repo is itself a symptom.
+- The watcher starts **before** any module loads. A module that errors stops
+  the rest of `init.lua`, and a fix must still be able to reload.
+- New modules log through `diag.logger(name)`, not bare `print`/`hs.printf`, so
+  the line reaches `.live/log.txt` too.

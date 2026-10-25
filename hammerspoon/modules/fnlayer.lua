@@ -5,6 +5,9 @@
 -- registers here via config/keymap.lua. Anything NOT fn-based can use
 -- hs.hotkey instead, which needs no tap.
 
+local diag = require("modules.diag")
+local log  = diag.logger("fnlayer")
+
 local M = {}
 
 -- Synthetic keyDown macOS emits on a lone, unchorded Globe tap. Undocumented;
@@ -45,12 +48,11 @@ local function compile(keymap)
   for name, spec in pairs(keymap) do
     local kc = hs.keycodes.map[name]
     if not kc then
-      hs.printf("fnlayer: unknown source key %q — binding skipped", name)
+      log.w("unknown source key %q — binding skipped", name)
     elseif not (spec.key or spec.action) then
-      hs.printf("fnlayer: %q has neither key nor action — skipped", name)
+      log.w("%q has neither key nor action — skipped", name)
     elseif spec.key and not hs.keycodes.map[spec.key] then
-      hs.printf("fnlayer: %q → unknown destination key %q — skipped",
-                name, spec.key)
+      log.w("%q → unknown destination key %q — skipped", name, spec.key)
     else
       for _, m in ipairs(spec.mods or {}) do
         if m == "fn" then
@@ -66,7 +68,6 @@ end
 function M.start(keymap)
   if M.tap then M.tap:stop() end
   local bindings = compile(keymap)
-  M.bindings = bindings   -- read-only view for status reporting (urlctl)
 
   M.tap = hs.eventtap.new(
     { eventTypes.keyDown, eventTypes.keyUp },
@@ -107,11 +108,18 @@ function M.start(keymap)
   )
   M.tap:start()
 
+  diag.provide("fnlayer", function()
+    local names = {}
+    for kc in pairs(bindings) do names[#names + 1] = hs.keycodes.map[kc] or tostring(kc) end
+    table.sort(names)
+    return { tapEnabled = M.tap:isEnabled(), bindings = names }
+  end)
+
   -- macOS disables taps under load, after timeouts, and across sleep.
   if M.watchdog then M.watchdog:stop() end
   M.watchdog = hs.timer.doEvery(5, function()
     if M.tap and not M.tap:isEnabled() then
-      print("fnlayer: tap disabled — restarting")
+      log.w("tap disabled — restarting")
       M.tap:start()
     end
   end)
