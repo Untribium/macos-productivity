@@ -74,3 +74,31 @@ through the probe's `teids` step, `pkill -x TextEdit`, repeated:
   revisit if the cache ever shows an id pointing at the wrong window.
 - Pruning is still needed, but to drop **closed** windows, whose handles go
   dead. It is not needed to defend against id reuse.
+
+## Addendum: a window opened by an off-space app
+
+A probe (Chrome only, listening only) watched `AXWindowCreated` /
+`AXUIElementDestroyed` on the app element and `windowCreated` /
+`windowDestroyed` on a window filter. On desktop 2, the user clicked a
+button in a tab of Chrome window 3736 that ran
+`setTimeout(()=>window.open('about:blank','_blank','popup,width=500,height=400'),4000)`
+(the delay stays inside Chrome's ~5s user-activation window), then pressed
+⌃8 at once.
+
+```
+17:00:22 wf created → win 26209 std=true title="about:blank - Google Chrome" spaces={ 234 } here=234
+17:00:22 ax AXWindowCreated → win 26209 std=true title="about:blank - Google Chrome" spaces={ 234 } here=234
+17:00:31 ax AXUIElementDestroyed → (not a window)      ×7
+```
+
+- **The new window opened on the user's current space (234)**, not the
+  opener's (7). Both the filter and the AX observer reported it at once.
+  New windows are therefore visible, and cached the normal way.
+- **`AXUIElementDestroyed` cannot be resolved to a window**: by the time it
+  arrives, the element is dead. That includes ordinary tab closes. **Prune
+  lazily** instead: when cmd+\` picks a cached handle that is dead, drop it
+  and take the next.
+- Untested: an app **assigned to a desktop** (Dock → Options → Assign To)
+  opens windows on that desktop, which would be a genuinely off-space
+  creation. Notifications are not space-filtered, so it is probably still
+  caught. Check with Webex if it gets assigned.

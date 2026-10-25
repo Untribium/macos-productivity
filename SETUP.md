@@ -508,6 +508,9 @@ collide and something has to move. That is a real cost of the modifier choice in
      a usable handle, which `focus()` then switched to. The probe never
      enumerated that window. So the cache fills from any window that changes,
      and the gap shrinks to windows that stay completely static.
+     New windows open on the **current** space, even when an off-space
+     window opened them, and are reported at once. Destroy notifications
+     cannot be resolved to a window, so **prune lazily** at cmd+\` time.
   4. **Webex.** Are the call and chat windows the same process? If not,
      "same app" will not link them. Probe with a free account on this
      machine, after Chrome works.
