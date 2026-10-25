@@ -132,22 +132,20 @@ end
 -- Overlay geometry. The canvas is larger than the panel by MARGIN on every
 -- side so the panel's shadow has room to fall.
 local MARGIN, W, HEAD, ROW_H, PAD, RADIUS = 40, 600, 52, 30, 10, 24
-local HL = 2   -- element index of the selection pill; see place()
+local HL = 3   -- element index of the selection pill (above the sheen); see place()
 
--- Approximates Liquid Glass: translucent body, top sheen, bright rim, a glass
--- pill for the selection. Real glass blurs/refracts what is behind the window;
+-- Approximates Liquid Glass: translucent body, top sheen, bright rim. Real glass blurs/refracts what is behind the window;
 -- a canvas cannot sample the screen without Screen Recording (not granted).
+-- The selection is a flat accent-coloured pill, like a native macOS selection.
 local function palette(style)
   if (style or hs.host.interfaceStyle()) == "Dark" then
     return { body = { white = 0.10, alpha = 0.78 }, sheen = { white = 1, alpha = 0.16 },
-             rim = { white = 1, alpha = 0.22 }, pillTop = { white = 1, alpha = 0.30 },
-             pillBottom = { white = 1, alpha = 0.14 }, pillRim = { white = 1, alpha = 0.45 },
+             rim = { white = 1, alpha = 0.22 },
              text = { white = 1, alpha = 0.96 }, dim = { white = 1, alpha = 0.55 },
              sep = { white = 1, alpha = 0.10 }, shadow = { white = 0, alpha = 0.45 } }
   end
   return { body = { white = 0.97, alpha = 0.82 }, sheen = { white = 1, alpha = 0.60 },
-           rim = { white = 1, alpha = 0.75 }, pillTop = { white = 1, alpha = 0.85 },
-           pillBottom = { white = 0.80, alpha = 0.55 }, pillRim = { white = 1, alpha = 0.95 },
+           rim = { white = 1, alpha = 0.75 },
            text = { white = 0, alpha = 0.88 }, dim = { white = 0, alpha = 0.50 },
            sep = { white = 0, alpha = 0.08 }, shadow = { white = 0, alpha = 0.28 } }
 end
@@ -173,15 +171,17 @@ function M.buildOverlay(rows, idx, app, frame, style)
   c[1] = { type = "rectangle", action = "fill", frame = panel, roundedRectRadii = radii,
            fillColor = P.body, withShadow = true,
            shadow = { blurRadius = 36, color = P.shadow, offset = { w = 0, h = -14 } } }
+  c[2] = { type = "rectangle", action = "fill", frame = panel, roundedRectRadii = radii,
+           fillGradient = "linear", fillGradientAngle = 90,
+           fillGradientColors = { CLEAR, CLEAR, P.sheen } }   -- evenly spaced: sheen on the top third
+  -- the selection is the system accent colour (System Settings → Appearance),
+  -- read on every draw so a change applies at once; flat, no gradient
+  local accent = hs.drawing.color.lists()["System"]["controlAccentColor"]
   c[HL] = { type = "rectangle", action = "strokeAndFill",
             frame = { x = MARGIN + 8, y = rowTop + (idx - 1) * ROW_H, w = W - 16, h = ROW_H },
             roundedRectRadii = { xRadius = 12, yRadius = 12 },
-            fillGradient = "linear", fillGradientAngle = 90,
-            fillGradientColors = { P.pillBottom, P.pillTop },
-            strokeColor = P.pillRim, strokeWidth = 1 }
-  c[3] = { type = "rectangle", action = "fill", frame = panel, roundedRectRadii = radii,
-           fillGradient = "linear", fillGradientAngle = 90,
-           fillGradientColors = { CLEAR, CLEAR, P.sheen } }   -- evenly spaced: sheen on the top third
+            fillColor = { red = accent.red, green = accent.green, blue = accent.blue, alpha = 0.85 },
+            strokeColor = accent, strokeWidth = 1 }
   c[4] = { type = "rectangle", action = "stroke", roundedRectRadii = radii,
            frame = { x = MARGIN + 0.5, y = MARGIN + 0.5, w = W - 1, h = panelH - 1 },
            strokeColor = P.rim, strokeWidth = 1 }
@@ -202,11 +202,12 @@ function M.buildOverlay(rows, idx, app, frame, style)
 
   for i, r in ipairs(rows) do
     local ry = rowTop + (i - 1) * ROW_H + 6
+    local sel = (i == idx)
     c[#c + 1] = { type = "text", text = r.title, textFont = ".AppleSystemUIFont", textSize = 14,
-                  textColor = P.text, textLineBreak = "truncateTail",
+                  textColor = sel and { white = 1 } or P.text, textLineBreak = "truncateTail",
                   frame = { x = MARGIN + 24, y = ry, w = W - 48 - 150, h = ROW_H - 6 } }
     c[#c + 1] = { type = "text", text = r.label, textFont = ".AppleSystemUIFont", textSize = 12,
-                  textColor = P.dim, textAlignment = "right",
+                  textColor = sel and { white = 1, alpha = 0.85 } or P.dim, textAlignment = "right",
                   frame = { x = MARGIN + W - 24 - 150, y = ry + 1, w = 150, h = ROW_H - 6 } }
   end
   return c, x, y, centreY
