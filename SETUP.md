@@ -510,7 +510,11 @@ collide and something has to move. That is a real cost of the modifier choice in
      and the gap shrinks to windows that stay completely static.
      New windows open on the **current** space, even when an off-space
      window opened them, and are reported at once. Destroy notifications
-     cannot be resolved to a window, so **prune lazily** at cmd+\` time.
+     cannot be resolved to a window, and **the window filter misses
+     off-space closes entirely**. Liveness test: **`windowSpaces(id)`
+     non-empty**. It is cheap (WindowServer, no AX round-trip), so prune
+     every entry on each press, and admit an entry only once it has a space
+     (new windows briefly report `{}`).
   4. **Webex.** Are the call and chat windows the same process? If not,
      "same app" will not link them. Probe with a free account on this
      machine, after Chrome works.

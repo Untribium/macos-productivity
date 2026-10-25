@@ -102,3 +102,36 @@ button in a tab of Chrome window 3736 that ran
   opens windows on that desktop, which would be a genuinely off-space
   creation. Notifications are not space-filtered, so it is probably still
   caught. Check with Webex if it gets assigned.
+
+## Addendum: a window closed on another space
+
+Probe (listening only): a Chrome window filter recorded handles on
+`windowCreated` and logged `windowDestroyed`; an AX observer logged
+`AXUIElementDestroyed`. The `check` step read each handle with calls that
+never move focus or space. On desktop 2 the user clicked a button that ran
+`const w=window.open('about:blank','_blank','popup,width=500,height=400');setTimeout(()=>w.close(),15000)`,
+so the popup opened on desktop 2 (space 7), then pressed ⌃8. The popup closed
+15s later, off-space.
+
+```
+17:02:46 created 26260 on {} (here 7)
+17:03:01 ax AXUIElementDestroyed → (unresolved) (here 234)      ×7
+         (no "wf destroyed" line at all)
+17:03:30 check 26260: app="Google Chrome" id=26260 isStandard=false spaces={} title=""        getById=false
+17:03:30 check 3736:  app="Google Chrome" id=3736  isStandard=true  spaces={ 7 } title="data:…" getById=false
+17:03:30 check 23683: app="Google Chrome" id=23683 isStandard=true  spaces={ 6 } title="New Incognito Tab…" getById=false
+```
+
+- **The window filter missed the close entirely**: no `windowDestroyed` for
+  a window closed off-space. A filter-backed list keeps dead windows. The
+  cache has to prune itself.
+- **A dead handle still answers** `id()` and `application()`, but
+  `title()` is `""`, `isStandard()` is **false**, and
+  **`windowSpaces(id)` is `{}`**. Live off-space windows return their space.
+- **Liveness test: `windowSpaces(id)` non-empty.** It comes from the
+  WindowServer, not an AX round-trip to the app, so it is cheap enough to
+  check every cached entry on each cmd+\` press (eager pruning), as well as
+  dropping a dead pick lazily.
+- **Caveat:** at creation, 26260 also showed `spaces={}`, before it was
+  ordered in. So "empty means dead" applies only to an entry that was seen
+  with a space before. Admit an entry once it has a space.
