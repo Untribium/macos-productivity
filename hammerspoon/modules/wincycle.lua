@@ -31,6 +31,7 @@ local log  = diag.logger("wincycle")
 local M = {}
 
 local cache = {}   -- id -> { win, pid, app, seen }
+M.cache = cache   -- read-only view, for probes
 local seq   = 0    -- monotonic MRU counter
 local cycle = nil  -- { list, idx, pid, poll } while cmd is held
 

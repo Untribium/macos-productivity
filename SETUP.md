@@ -537,12 +537,17 @@ collide and something has to move. That is a real cost of the modifier choice in
   same-space or cross-space (snapshot ≤14 ms, `focus()` ≤21 ms). The
   extra time on cross-space presses is macOS's space switch (a crossfade
   with Reduce Motion), not the module. To confirm: compare with ⌃N.
-- **Deferred, ask the user later: Chrome favicons in the overlay.** Plan:
-  read the active tab's URL from the window's address bar via AX (to
-  verify: does that work off-space?), then look the icon up in Chrome's
-  local `Favicons` SQLite DB (copied first, since Chrome locks it), cached by
-  domain. No network: a favicon web service would leak browsing domains.
-  Incognito tabs fall back to the Chrome icon.
+- ~~Chrome favicons in the overlay~~ **Dropped 2026-10-25, keep it simple.**
+  Found: the active tab's URL **can** be read from the window's address bar via
+  AX, including off-space, in 3–11 ms (Chrome omits the scheme and trims the
+  path, so match by domain). But the icons live in Chrome's `Favicons` DB,
+  under `~/Library/Application Support/Google/Chrome`, and macOS 27 blocks
+  reading it (`Operation not permitted`, the "data from other apps"
+  protection). Alternatives were rejected: granting Hammerspoon that
+  permission (it covers every app's data); fetching `/favicon.ico` from each
+  site (network calls outside the browser); AppleScript/JS into Chrome (two
+  more permissions). If ever wanted, showing the domain as text needs only
+  the AX read.
 - Side note: ⌃8 ("Switch to Desktop 8") did nothing when tried. Not
   investigated; something may be taking ⌃8 first.
 
@@ -1151,6 +1156,7 @@ local log  = diag.logger("wincycle")
 local M = {}
 
 local cache = {}   -- id -> { win, pid, app, seen }
+M.cache = cache   -- read-only view, for probes
 local seq   = 0    -- monotonic MRU counter
 local cycle = nil  -- { list, idx, pid, poll } while cmd is held
 
