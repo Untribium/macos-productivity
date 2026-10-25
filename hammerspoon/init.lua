@@ -44,4 +44,13 @@ configWatcher = hs.pathwatcher.new(root, function(paths)
 end)
 configWatcher:start()
 
+-- hammerspoon://reload and hammerspoon://status. Fixed endpoints only, never
+-- hs.ipc (SETUP.md §8). The status file sits at the repo root, outside the
+-- watched directory, so writing it cannot trigger a reload. It is gitignored.
+require("modules.urlctl").start({
+  root       = root,
+  statusFile = root .. "/../.live-status.json",
+  fnlayer    = fnlayer,
+})
+
 hs.notify.show("Hammerspoon", "", "config loaded — " .. root)

@@ -66,6 +66,7 @@ end
 function M.start(keymap)
   if M.tap then M.tap:stop() end
   local bindings = compile(keymap)
+  M.bindings = bindings   -- read-only view for status reporting (urlctl)
 
   M.tap = hs.eventtap.new(
     { eventTypes.keyDown, eventTypes.keyUp },

@@ -42,7 +42,8 @@ for e in "${ENTRIES[@]}"; do
   if ! diff -rq "$live" "$SRC/$e" >/dev/null 2>&1; then
     drift=1
     say "DRIFT: $live differs from the repo copy:"
-    diff -ru "$SRC/$e" "$live" 2>&1 | sed 's/^/    /' | head -60
+    # diff exits 1 on difference; under pipefail that would abort the script
+    diff -ru "$SRC/$e" "$live" 2>&1 | sed 's/^/    /' | head -60 || true
     say
   fi
 done

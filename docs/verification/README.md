@@ -44,7 +44,6 @@ Rules:
 
 | Probe | Question | §  |
 |---|---|---|
-| Auto-reload through the symlink | does a repo-side edit trigger `hs.reload()`, and does the notification name the repo path? | §7 |
 | Input Monitoring | does the fn tap need it in addition to Accessibility? | §3, §7 |
 | `hs.spaces` on 26.6.2 | does it work reliably enough to own layer 3? | §7 |
 | Zeal60 VIA fn audit | is its fn a plain `MO()`, and does it send a real fn keycode? | §7 |

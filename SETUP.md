@@ -22,7 +22,7 @@
 > produce a diff to this file. If something isn't in here, it isn't decided.
 
 **Status:** architecture decided; nav layer built and verified; repo scaffolded
-**Last updated:** 2026-09-01
+**Last updated:** 2026-10-25
 
 ---
 
@@ -41,7 +41,8 @@ macos-productivity/
 │   ├── config/keymap.lua #   bindings as data — the file you edit
 │   └── modules/fnlayer.lua #  the fn tap
 └── docs/
-    └── verification/     # probe results and transcripts (dated, one file per probe)
+    ├── verification/     # probe results and transcripts (dated, one file per probe)
+    └── attic/            # retired code kept for its learnings — never loaded
 ```
 
 **Install model: symlink, not copy.** `bootstrap.sh` symlinks the three entries
@@ -72,6 +73,21 @@ So `defaults read`, `hs -c`, and anything CoreGraphics is out of reach; every
 such probe is a command the session writes down and the user runs, pasting the
 output back. This is why `docs/verification/` exists: it is where that output
 lands so the next session does not re-ask.
+
+**Claude Code running natively on the Mac** (e.g. in the VS Code terminal) is a
+different case: its shell is macOS and runs as the user, so it can read
+`~/.hammerspoon` and run `defaults`. It can also drive Hammerspoon through the
+fixed `hammerspoon://` endpoints in `modules/urlctl.lua`:
+
+```sh
+open -g hammerspoon://reload    # reload the config
+open -g hammerspoon://status    # rewrite <repo>/.live-status.json
+cat .live-status.json           # watched dir, fn tap state, bound keys, AX grant
+```
+
+The status file is rewritten on every load, so a newer `loaded` time confirms a
+reload happened. Keypress behaviour still needs a person at the keyboard. There
+is deliberately **no `hs.ipc`** (§8), so `hs -c` does not work.
 
 **Session shape (default):**
 
@@ -324,7 +340,7 @@ collide and something has to move. That is a real cost of the modifier choice in
 | Nav layer (caps → Escape + arrows) | **done** (2026-08-30) | architecture | verified on both keyboards |
 | Config module structure | **done** (2026-08-30) | nav layer | loader / keymap / fnlayer; §10 |
 | Input source switching | **done** (2026-08-30) | nav layer | `caps+space`; three layouts, one direction |
-| Repo & Cowork workflow | **done** (2026-09-01) | config module structure | §0. Repo scaffolded, `bootstrap.sh` written; **not yet run** |
+| Repo & Cowork workflow | **done** (2026-09-01) | config module structure | §0. `bootstrap.sh` applied 2026-10-25; `~/.hammerspoon` now links into the repo |
 | Window moving & resizing (halves) | **next** | architecture | primary window use case. **First question is which modifier** — see §7 |
 | Displays & multi-monitor | ready | architecture | must handle office/home monitor swap |
 | Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely |
@@ -341,18 +357,19 @@ collide and something has to move. That is a real cost of the modifier choice in
 
 **Repo / workflow (new, 2026-09-01)**
 
-- **`bootstrap.sh` has not been run.** Until it is, `~/.hammerspoon` and the repo
-  are two independent copies. The script's dry run prints any drift — run that
-  first, reconcile into the repo, then `--apply`.
-- **Does auto-reload survive the symlink?** `init.lua` watches its resolved repo
-  directory rather than `hs.configdir` for this reason (§0), but that is reasoned,
-  not observed. Probe: edit a comment in `hammerspoon/config/keymap.lua`, confirm
-  the reload notification fires. File the result in `docs/verification/`.
-- **Does `debug.getinfo(1,"S").source` give an absolute path here?** If
-  Hammerspoon loads `init.lua` by a relative name, `configRoot()` falls through to
-  `hs.configdir` and auto-reload quietly reverts to the broken case. The load
-  notification prints the watched directory — that is the check, and it is
-  cheap to do at the same time as the probe above.
+- ~~`bootstrap.sh` has not been run.~~ **Done 2026-10-25.** The drift was
+  comment-only in `keymap.lua`/`fnlayer.lua`, plus a live-only `winswitch.lua`
+  loaded by the old `init.lua`, which is now archived in `docs/attic/` (see §8).
+  Originals are in `~/.hammerspoon/.backup-20261025-150055/`. The stale
+  `~/.hammerspoon/capsnav.lua` is not one of the linked entries, so bootstrap
+  left it in place; it is unused and safe to delete (a copy is in the attic).
+  The first run also showed that the script exited on the first drift it found
+  (`diff` returns 1 under `pipefail`), so it could never have linked over
+  drift. Fixed.
+- ~~Does auto-reload survive the symlink?~~ **Yes, observed 2026-10-25.**
+  Repo-side edits triggered a reload. `docs/verification/2026-10-25-auto-reload-through-symlink.md`.
+- ~~Does `debug.getinfo(1,"S").source` give an absolute path here?~~ **Yes.**
+  The watched directory is the repo path; the fallback did not fire. Same file.
 - **Where do secrets / machine-specific values go?** Nothing needs them yet. If
   the window chat introduces per-location display config, decide then whether it
   is a gitignored local file or branching on `hs.screen` identity.
@@ -483,6 +500,8 @@ Append-only. Each entry: what was decided, why, and what it rules out.
 | 2026-09-01 | `init.lua` watches its **resolved** directory, not `hs.configdir` | FSEvents does not report writes that land on a symlink's target, so the original watcher would have stopped auto-reloading the moment bootstrap ran — and failed silently, which is worse than not having it. | Keeping the naive `hs.pathwatcher.new(hs.configdir)` under a symlink install |
 | 2026-09-01 | `SETUP.md` lives in the repo; project knowledge holds a mirror, repo wins | The doc and the config it describes change in the same edit and belong in the same commit. The mirror keeps chats that are not connected to the folder working, at the cost of one sync step per session. | Project knowledge as the authoritative copy; dropping the project doc and losing unconnected chats |
 | 2026-09-01 | macOS-side facts are gathered as **probes**: user runs the command, output is filed in `docs/verification/` | A Cowork session's shell is a Linux VM with only this folder mounted — `defaults`, `hs`, and System Settings are all unreachable from it. Writing probes down as artefacts stops each session re-asking the same question. | Any workflow that assumes a session can inspect the running macOS |
+| 2026-10-25 | Pre-repo `winswitch.lua` (alt+tab cross-space MRU switcher) **retired** to `docs/attic/`, not brought into the config | It was never designed against this document (no §4/§5 rows, a second event tap) and is not the switching behaviour wanted. Its findings about off-space window handles are recorded in `docs/attic/README.md` for the window-switching subtopic. | Reviving `winswitch.lua` as the starting design; `alt+tab`/`` alt+` `` as implicitly taken |
+| 2026-10-25 | Hammerspoon is driven from the shell through **fixed `hammerspoon://` URL endpoints** (`reload`, `status`), never `hs.ipc` | `hs.ipc` lets any process running as the user run arbitrary Lua, and so borrow Hammerspoon's Accessibility grant for keylogging and synthetic input, which macOS would otherwise block per app. Parameterless endpoints cap the worst case at a reload or a rewritten status file, and still cover reloading and status checks from a native session. | `hs.ipc` / `hs -c`, except temporarily for one session and removed afterwards; endpoints that take params or evaluate input |
 
 ---
 
@@ -497,6 +516,8 @@ what Hammerspoon reads; the arrow is the symlink `bootstrap.sh` creates.
 | `keymap.lua` | `hammerspoon/config/keymap.lua` | → `~/.hammerspoon/config/` | bindings as data; machine-readable twin of §5 |
 | `fnlayer.lua` | `hammerspoon/modules/fnlayer.lua` | → `~/.hammerspoon/modules/` | 1 — **sole owner of the fn tap** |
 | `bootstrap.sh` | `bootstrap.sh` | — | creates the three symlinks above; dry run by default |
+| `urlctl.lua` | `hammerspoon/modules/urlctl.lua` | → `~/.hammerspoon/modules/` | none — `hammerspoon://reload` and `://status` endpoints; writes the gitignored `.live-status.json` |
+| `docs/attic/*.lua` | `docs/attic/` | — *(not linked, not loaded)* | none — retired `winswitch.lua`, `capsnav.lua`, kept for learnings |
 | *(not in repo)* | — | `~/.hammerspoon/Spoons/` | Hammerspoon's own; gitignored, left alone by bootstrap |
 | *(GUI setting — not a file)* | README manual step 1 | System Settings → Keyboard → Modifier Keys, **per keyboard** | 0 |
 | *(GUI setting — not a file)* | README manual step 2 | Keyboard → "Press 🌐 key to" → **Do Nothing** | 0 — Escape depends on this |
@@ -514,8 +535,9 @@ embedded in this document so a chat that receives it sees both.
 
 Nav layer verified working on both keyboards, 2026-08-30. Split into modules
 2026-08-30. Moved into the repo and given a symlink-aware config watcher
-2026-09-01 — **re-verify `caps+hjkl`, lone-tap Escape, `caps+space` and
-auto-reload after running `bootstrap.sh`.**
+2026-09-01. Linked live by `bootstrap.sh` 2026-10-25, when `urlctl.lua` was
+also added; auto-reload through the link was verified the same day. **Still to
+re-verify by hand: `caps+hjkl`, lone-tap Escape, `caps+space`.**
 
 ### `hammerspoon/init.lua` → `~/.hammerspoon/init.lua`
 
@@ -565,6 +587,15 @@ configWatcher = hs.pathwatcher.new(root, function(paths)
   end
 end)
 configWatcher:start()
+
+-- hammerspoon://reload and hammerspoon://status. Fixed endpoints only, never
+-- hs.ipc (SETUP.md §8). The status file sits at the repo root, outside the
+-- watched directory, so writing it cannot trigger a reload. It is gitignored.
+require("modules.urlctl").start({
+  root       = root,
+  statusFile = root .. "/../.live-status.json",
+  fnlayer    = fnlayer,
+})
 
 hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
 ```
@@ -683,6 +714,7 @@ end
 function M.start(keymap)
   if M.tap then M.tap:stop() end
   local bindings = compile(keymap)
+  M.bindings = bindings   -- read-only view for status reporting (urlctl)
 
   M.tap = hs.eventtap.new(
     { eventTypes.keyDown, eventTypes.keyUp },
@@ -751,6 +783,70 @@ end
 return M
 ```
 
+### `hammerspoon/modules/urlctl.lua`
+
+```lua
+-- modules/urlctl.lua — fixed hammerspoon:// control endpoints (SETUP.md §0, §8).
+--
+-- The deliberately narrow alternative to hs.ipc. hs.ipc lets any process
+-- running as this user execute arbitrary Lua, and so borrow Hammerspoon's
+-- Accessibility grant (keylogging, synthetic input). These endpoints take no
+-- parameters and do one fixed thing each, so the worst a hostile caller can
+-- do is trigger a reload or rewrite the status file.
+--
+--   open -g hammerspoon://reload   reload the config
+--   open -g hammerspoon://status   rewrite the status file
+--
+-- The status file is also written on every load, so a changed `loaded` time
+-- is how a caller confirms a reload actually happened.
+--
+-- RULE: never add an endpoint that reads its params, evaluates anything, or
+-- writes anywhere but the status file. That would make this hs.ipc again.
+
+local M = {}
+
+local function sortedNames(byKeycode)
+  local out = {}
+  for kc in pairs(byKeycode or {}) do
+    out[#out + 1] = hs.keycodes.map[kc] or tostring(kc)
+  end
+  table.sort(out)
+  return out
+end
+
+local function writeStatus(ctx, reason)
+  local tap = ctx.fnlayer.tap
+  local status = {
+    reason        = reason,
+    loaded        = M.loadedAt,
+    written       = os.date("%Y-%m-%dT%H:%M:%S"),
+    hsVersion     = hs.processInfo.version,
+    configdir     = hs.configdir,
+    watching      = ctx.root,
+    accessibility = hs.accessibilityState(),
+    fnTap         = tap and tap:isEnabled() or false,
+    fnBindings    = sortedNames(ctx.fnlayer.bindings),
+  }
+  local f, err = io.open(ctx.statusFile, "w")
+  if not f then
+    hs.printf("urlctl: cannot write %s: %s", ctx.statusFile, err)
+    return
+  end
+  f:write(hs.json.encode(status, true), "\n")
+  f:close()
+end
+
+-- ctx: { root = watched dir, statusFile = path, fnlayer = module }
+function M.start(ctx)
+  M.loadedAt = os.date("%Y-%m-%dT%H:%M:%S")
+  hs.urlevent.bind("reload", function() hs.reload() end)
+  hs.urlevent.bind("status", function() writeStatus(ctx, "requested") end)
+  writeStatus(ctx, "load")
+end
+
+return M
+```
+
 **Why it is shaped this way:**
 
 - Returning `true, { repl }` deletes the original and posts a replacement rather
@@ -773,3 +869,8 @@ return M
   the keymap** — a skipped binding looks identical to a broken one.
 - `configRoot()` in `init.lua` exists only because of the symlink install (§0).
   Under a copy install it is a no-op that returns `hs.configdir`.
+- `urlctl.lua` endpoints take no parameters on purpose (§8). The status file
+  lands at the repo root, outside the watched `hammerspoon/` directory, so
+  writing it cannot trigger a reload loop. If `configRoot()` ever falls back
+  to `hs.configdir`, the file lands in `~/` instead, so a missing
+  `.live-status.json` in the repo is itself a symptom.

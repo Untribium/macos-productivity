@@ -2,3 +2,6 @@
 # bootstrap.sh leaves that directory alone; it is not part of this repo.
 hammerspoon/Spoons/
 .DS_Store
+
+# Written by hammerspoon/modules/urlctl.lua on every load; machine state, not config.
+.live-status.json
