@@ -358,7 +358,7 @@ collide and something has to move. That is a real cost of the modifier choice in
 | Repo & Cowork workflow | **done** (2026-09-01) | config module structure | §0. `bootstrap.sh` applied 2026-10-25; `~/.hammerspoon` now links into the repo |
 | Window moving & resizing (halves) | **next** | architecture | primary window use case. **First question is which modifier** — see §7 |
 | Displays & multi-monitor | ready | architecture | must handle office/home monitor swap |
-| Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely. 2026-10-25 on 27.0.1: `allSpaces`/`windowsForSpace`/`focusedSpace`/watcher work; **`moveWindowToSpace()` returns true but does not move the window**; `missionControlSpaceNames()` returns nil |
+| Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely. 2026-10-25 on 27.0.1: `allSpaces`/`windowsForSpace`/`focusedSpace`/watcher work; **`moveWindowToSpace()` returns true but does not move the window**; `missionControlSpaceNames()` returns nil; **`gotoSpace()` dead** (Mission Control AX tree empty on 27) |
 | Window switching (focus) | **PoC working** (2026-10-25) | architecture | not a switcher: `` cmd+` `` cycling the app's windows **across spaces**, MRU. Findings re-verified; see §7 "Window cycling across spaces" |
 | Launcher & app switching | ready | architecture | Spotlight + direct-launch binds |
 | Zeal60 firmware & physical layout | ready | nav layer | modifier row parity, Esc/backtick position, QMK fn audit |
@@ -556,9 +556,14 @@ collide and something has to move. That is a real cost of the modifier choice in
   Id-based unknown detection is meaningless right after a reload: every
   unvisited space's own system ids look unknown. Use **"desktops not visited
   since load"** as the signal; per-id detection only after a visit.
-  **`hs.spaces.gotoSpace()` is broken on 27.0.1** ("no display with
-  specified id found"; it relies on the Mission Control AX tree, like
-  `missionControlSpaceNames()`). Switching must go through keyboard
+  **`hs.spaces.gotoSpace()` is dead on 27.0.1, confirmed.** It opens Mission
+  Control and presses a desktop in the Dock's AX tree (group `mc` →
+  `mc.display` → `mc.spaces`). On 27 the `mc` group appears ~100 ms after
+  opening but stays **empty** (0 children, empty frame) for 3 s of polling.
+  It is not timing and not an ID mismatch; the strip is no longer exposed.
+  `missionControlSpaceNames()`, `addSpaceToScreen()` and `removeSpace()` use
+  the same tree. Routes left: `focus()` on a cached window (any space with
+  a known window), and keyboard shortcuts (empty or unseen spaces). Switching must go through keyboard
   shortcuts: a sweep uses **"Move left/right a space"**, which works with any
   number of desktops (the user sometimes has more than 10); "Switch to
   Desktop N" exists only for 1–16. Both could sit on unreachable hyper
