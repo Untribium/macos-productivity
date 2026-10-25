@@ -548,6 +548,29 @@ collide and something has to move. That is a real cost of the modifier choice in
   site (network calls outside the browser); AppleScript/JS into Chrome (two
   more permissions). If ever wanted, showing the domain as text needs only
   the AX read.
+- **Cache refresh (2026-10-25, in progress):** a notification with a
+  "Refresh" button works: `hs.notify` with `hasActionButton`; the action click
+  arrives as `activationType` 2 and "Later" sends nothing. It needs Hammerspoon
+  notifications **on**, style **Persistent** (enabled by the user 2026-10-25).
+  The `presented()` flag stays false even when shown, so it is unreliable.
+  Id-based unknown detection is meaningless right after a reload: every
+  unvisited space's own system ids look unknown. Use **"desktops not visited
+  since load"** as the signal; per-id detection only after a visit.
+  **`hs.spaces.gotoSpace()` is broken on 27.0.1** ("no display with
+  specified id found"; it relies on the Mission Control AX tree, like
+  `missionControlSpaceNames()`). Switching must go through keyboard
+  shortcuts: a sweep uses **"Move left/right a space"**, which works with any
+  number of desktops (the user sometimes has more than 10); "Switch to
+  Desktop N" exists only for 1–16. Both could sit on unreachable hyper
+  chords, like `caps+space` (§8), so the user's own keys stay free.
+- **To do: script layer 0 instead of README manual steps.** `bootstrap.sh`
+  only symlinks. Keyboard Shortcuts rows (input source, desktop switching)
+  can be written with `defaults write com.apple.symbolichotkeys` +
+  `activateSettings -u`, with no admin. Caps → fn is per device in the global
+  domain (`com.apple.keyboard.modifiermapping.<vendor>-<product>-0`); check
+  whether it applies without logging out. "Press 🌐 key to" is
+  `com.apple.HIToolbox AppleFnUsageType`, to verify. Matters more as the
+  hyper channel grows.
 - Side note: ⌃8 ("Switch to Desktop 8") did nothing when tried. Not
   investigated; something may be taking ⌃8 first.
 
