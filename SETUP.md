@@ -589,6 +589,9 @@ collide and something has to move. That is a real cost of the modifier choice in
   to-do, mindful of the §7 traps (disabled rows still claim chords; no two
   rows on one chord). Verify every switch by polling, since an enabled
   binding can still fail (⌃8 does), and fall back on a timeout.
+- **Later (user, 2026-10-25): the reload alert is ugly.** `init.lua` uses a
+  plain `hs.alert`. Restyle it, e.g. a small transient `hs.canvas` toast reusing
+  the wincycle overlay's glass palette (`modules/wincycle.lua` `palette()`).
 - **To do: script layer 0 instead of README manual steps.** `bootstrap.sh`
   only symlinks. Keyboard Shortcuts rows (input source, desktop switching)
   can be written with `defaults write com.apple.symbolichotkeys` +
