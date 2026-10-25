@@ -85,7 +85,15 @@ open -g hammerspoon://status    # rewrite .live/status.json and .live/console.tx
 cat .live/status.json           # watched dir, AX grant, one section per module
 tail .live/log.txt              # diag.logger() lines, kept across reloads
 grep -n ERROR .live/console.txt # errors and stack traces from callbacks
+open -g hammerspoon://probe     # call run() on probes/active.lua, no reload
 ```
+
+**Probes** that need to run on the Mac are Lua, not pasted commands:
+write `hammerspoon/probes/active.lua` (gitignored, contract in
+`probes/README.md`). Saving the file runs it. `://probe` runs later steps
+without a reload, so captured state such as window handles survives a
+space switch. Findings still go to `docs/verification/`; delete the file
+when done.
 
 `.live/` (gitignored, `modules/diag.lua`) is output only. Status and console are
 rewritten on every load, so a newer `loaded` time confirms a reload happened.
@@ -508,6 +516,7 @@ Append-only. Each entry: what was decided, why, and what it rules out.
 | 2026-10-25 | Pre-repo `winswitch.lua` (alt+tab cross-space MRU switcher) **retired** to `docs/attic/`, not brought into the config | It was never designed against this document (no §4/§5 rows, a second event tap) and is not the switching behaviour wanted. Its findings about off-space window handles are recorded in `docs/attic/README.md` for the window-switching subtopic. | Reviving `winswitch.lua` as the starting design; `alt+tab`/`` alt+` `` as implicitly taken |
 | 2026-10-25 | Hammerspoon is driven from the shell through **fixed `hammerspoon://` URL endpoints** (`reload`, `status`), never `hs.ipc` | `hs.ipc` lets any process running as the user run arbitrary Lua, and so borrow Hammerspoon's Accessibility grant for keylogging and synthetic input, which macOS would otherwise block per app. Parameterless endpoints cap the worst case at a reload or a rewritten status file, and still cover reloading and status checks from a native session. | `hs.ipc` / `hs -c`, except temporarily for one session and removed afterwards; endpoints that take params or evaluate input |
 | 2026-10-25 | Running-config diagnostics go to files in a gitignored `<repo>/.live/` (log, console dump, status with per-module `diag.provide()` sections); the config watcher starts before any module | A shell session cannot see the Hammerspoon console, and switcher work needs the window cache visible without one. Files are output only, so this adds observability without adding input surface. The watcher order means a module that fails to load can still be fixed by saving a file. | Debugging by asking the user to copy console text; module state exposed by evaluating Lua; synthetic keypresses from the shell (would need Accessibility for the terminal) |
+| 2026-10-25 | **Correction to the `hs.ipc` row above:** the endpoints are a convenience and a narrow interface, **not a security boundary**. Added `hammerspoon://probe` and a gitignored `hammerspoon/probes/active.lua` probe runner | That row's rationale was overstated. The config itself is the way in: any process running as the user can write `.lua` into the watched directory, or edit it and relaunch Hammerspoon, and so already borrow the Accessibility grant. That is true of every Hammerspoon install and is not fixable without admin (a root-owned config); disabling the watcher only delays it. So running probe code from a file in the repo adds no exposure beyond the config. Real mitigations: grant Hammerspoon nothing beyond Accessibility; config changes are visible in git; review edits to `hammerspoon/`, including Claude's. | Disabling auto-reload as a security measure; `chflags uchg` (the user can clear it); treating `hs.ipc` as the main risk. `hs.ipc` stays out, because the endpoints are enough, not for security |
 
 ---
 
@@ -523,6 +532,7 @@ what Hammerspoon reads; the arrow is the symlink `bootstrap.sh` creates.
 | `fnlayer.lua` | `hammerspoon/modules/fnlayer.lua` | → `~/.hammerspoon/modules/` | 1 — **sole owner of the fn tap** |
 | `bootstrap.sh` | `bootstrap.sh` | — | creates the three symlinks above; dry run by default |
 | `urlctl.lua` | `hammerspoon/modules/urlctl.lua` | → `~/.hammerspoon/modules/` | none — `hammerspoon://reload` and `://status` endpoints; writes `.live/status.json` |
+| `probes/` | `hammerspoon/probes/` | — *(read from the repo path by `init.lua`; not linked)* | none — `README.md` tracked; `active.lua` gitignored, run on load by `init.lua` |
 | `diag.lua` | `hammerspoon/modules/diag.lua` | → `~/.hammerspoon/modules/` | none — `logger()` and `provide()` for modules; owns the gitignored `.live/` |
 | `docs/attic/*.lua` | `docs/attic/` | — *(not linked, not loaded)* | none — retired `winswitch.lua`, `capsnav.lua`, kept for learnings |
 | *(not in repo)* | — | `~/.hammerspoon/Spoons/` | Hammerspoon's own; gitignored, left alone by bootstrap |
@@ -606,10 +616,19 @@ local fnlayer = require("modules.fnlayer")
 
 fnlayer.start(keymap.fn)
 
--- hammerspoon://reload and hammerspoon://status. Fixed endpoints only, never
--- hs.ipc (SETUP.md §8). Started last so the load-time status sees every
--- module's provider.
-require("modules.urlctl").start({ root = root })
+-- Optional, gitignored probe (probes/README.md). Caught, so a broken probe
+-- cannot take the config down with it.
+local probe
+local probePath = root .. "/probes/active.lua"
+if hs.fs.attributes(probePath) then
+  local ok, res = xpcall(dofile, debug.traceback, probePath)
+  if ok then probe = res else diag.logger("probe").e("load failed: %s", res) end
+end
+
+-- hammerspoon://reload, ://status, ://probe. Parameterless endpoints in
+-- place of hs.ipc (SETUP.md §8). Started last so the load-time status sees
+-- every module's provider.
+require("modules.urlctl").start({ root = root, probe = probe })
 
 hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
 ```
@@ -810,21 +829,21 @@ return M
 ```lua
 -- modules/urlctl.lua — fixed hammerspoon:// control endpoints (SETUP.md §0, §8).
 --
--- The deliberately narrow alternative to hs.ipc. hs.ipc lets any process
--- running as this user execute arbitrary Lua, and so borrow Hammerspoon's
--- Accessibility grant (keylogging, synthetic input). These endpoints take no
--- parameters and do one fixed thing each, so the worst a hostile caller can
--- do is trigger a reload or rewrite the files in .live/.
+-- A narrow interface in place of hs.ipc. NOT a security boundary (SETUP.md
+-- §8): anything running as this user can already write the config, which
+-- this file is part of. The narrowness is about keeping the surface small
+-- and predictable, not about keeping an attacker out.
 --
 --   open -g hammerspoon://reload   reload the config
 --   open -g hammerspoon://status   rewrite .live/status.json and .live/console.txt
+--   open -g hammerspoon://probe    call run() on probes/active.lua, if loaded
 --
 -- Both files are also written on every load, so a changed `loaded` time is how
 -- a caller confirms a reload actually happened. Module state comes from
 -- diag.provide(); see modules/diag.lua.
 --
--- RULE: never add an endpoint that reads its params, evaluates anything, or
--- writes outside .live/. That would make this hs.ipc again.
+-- RULE: endpoints take no params. Code to run comes from files in the repo
+-- (probes/), which are in git or deliberately gitignored, never from the URL.
 
 local diag = require("modules.diag")
 local log  = diag.logger("urlctl")
@@ -856,12 +875,22 @@ local function writeStatus(ctx, reason)
   diag.dumpConsole()
 end
 
--- ctx: { root = watched dir }. Call after every other module has started, so
--- the load-time status includes their providers.
+local function runProbe(ctx)
+  local probe = ctx.probe
+  if not (probe and probe.run) then return log.w("probe requested, none loaded") end
+  local ok, err = xpcall(probe.run, debug.traceback)
+  if not ok then log.e("probe run failed: %s", err) end
+  writeStatus(ctx, "probe")
+end
+
+-- ctx: { root = watched dir, probe = loaded probe table or nil }. Call after
+-- every other module has started, so the load-time status includes their
+-- providers.
 function M.start(ctx)
   M.loadedAt = os.date("%Y-%m-%dT%H:%M:%S")
   hs.urlevent.bind("reload", function() log.i("reload requested"); hs.reload() end)
   hs.urlevent.bind("status", function() writeStatus(ctx, "requested") end)
+  hs.urlevent.bind("probe",  function() runProbe(ctx) end)
   writeStatus(ctx, "load")
 end
 

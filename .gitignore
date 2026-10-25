@@ -5,3 +5,6 @@ hammerspoon/Spoons/
 
 # Written by the running config (modules/diag.lua, urlctl.lua); machine state, not config.
 .live/
+
+# Throwaway probe code; findings go in docs/verification/.
+hammerspoon/probes/active.lua

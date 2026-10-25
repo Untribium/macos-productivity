@@ -1,20 +1,20 @@
 -- modules/urlctl.lua — fixed hammerspoon:// control endpoints (SETUP.md §0, §8).
 --
--- The deliberately narrow alternative to hs.ipc. hs.ipc lets any process
--- running as this user execute arbitrary Lua, and so borrow Hammerspoon's
--- Accessibility grant (keylogging, synthetic input). These endpoints take no
--- parameters and do one fixed thing each, so the worst a hostile caller can
--- do is trigger a reload or rewrite the files in .live/.
+-- A narrow interface in place of hs.ipc. NOT a security boundary (SETUP.md
+-- §8): anything running as this user can already write the config, which
+-- this file is part of. The narrowness is about keeping the surface small
+-- and predictable, not about keeping an attacker out.
 --
 --   open -g hammerspoon://reload   reload the config
 --   open -g hammerspoon://status   rewrite .live/status.json and .live/console.txt
+--   open -g hammerspoon://probe    call run() on probes/active.lua, if loaded
 --
 -- Both files are also written on every load, so a changed `loaded` time is how
 -- a caller confirms a reload actually happened. Module state comes from
 -- diag.provide(); see modules/diag.lua.
 --
--- RULE: never add an endpoint that reads its params, evaluates anything, or
--- writes outside .live/. That would make this hs.ipc again.
+-- RULE: endpoints take no params. Code to run comes from files in the repo
+-- (probes/), which are in git or deliberately gitignored, never from the URL.
 
 local diag = require("modules.diag")
 local log  = diag.logger("urlctl")
@@ -46,12 +46,22 @@ local function writeStatus(ctx, reason)
   diag.dumpConsole()
 end
 
--- ctx: { root = watched dir }. Call after every other module has started, so
--- the load-time status includes their providers.
+local function runProbe(ctx)
+  local probe = ctx.probe
+  if not (probe and probe.run) then return log.w("probe requested, none loaded") end
+  local ok, err = xpcall(probe.run, debug.traceback)
+  if not ok then log.e("probe run failed: %s", err) end
+  writeStatus(ctx, "probe")
+end
+
+-- ctx: { root = watched dir, probe = loaded probe table or nil }. Call after
+-- every other module has started, so the load-time status includes their
+-- providers.
 function M.start(ctx)
   M.loadedAt = os.date("%Y-%m-%dT%H:%M:%S")
   hs.urlevent.bind("reload", function() log.i("reload requested"); hs.reload() end)
   hs.urlevent.bind("status", function() writeStatus(ctx, "requested") end)
+  hs.urlevent.bind("probe",  function() runProbe(ctx) end)
   writeStatus(ctx, "load")
 end
 

@@ -54,9 +54,18 @@ local fnlayer = require("modules.fnlayer")
 
 fnlayer.start(keymap.fn)
 
--- hammerspoon://reload and hammerspoon://status. Fixed endpoints only, never
--- hs.ipc (SETUP.md §8). Started last so the load-time status sees every
--- module's provider.
-require("modules.urlctl").start({ root = root })
+-- Optional, gitignored probe (probes/README.md). Caught, so a broken probe
+-- cannot take the config down with it.
+local probe
+local probePath = root .. "/probes/active.lua"
+if hs.fs.attributes(probePath) then
+  local ok, res = xpcall(dofile, debug.traceback, probePath)
+  if ok then probe = res else diag.logger("probe").e("load failed: %s", res) end
+end
+
+-- hammerspoon://reload, ://status, ://probe. Parameterless endpoints in
+-- place of hs.ipc (SETUP.md §8). Started last so the load-time status sees
+-- every module's provider.
+require("modules.urlctl").start({ root = root, probe = probe })
 
 hs.notify.show("Hammerspoon", "", "config loaded — " .. root)
