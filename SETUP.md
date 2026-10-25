@@ -575,6 +575,15 @@ collide and something has to move. That is a real cost of the modifier choice in
   hidden spaces need a visit; "Move left/right" acts on the focused display,
   so a sweep runs per display; does "Switch to Desktop N" number per display
   or across all of them?
+  **Which shortcuts to send:** a Keyboard Shortcuts row holds exactly one
+  chord, so there is no second system binding for Hammerspoon's own use. At
+  runtime, **read** rows 118–133 (Desktop N) and 79/81 (move left/right) and
+  send whatever is enabled, by keycode. If a row is missing, fall back
+  (relative steps) and say so. **Do not write the settings at runtime.**
+  Creating missing rows on hyper chords belongs to the layer-0 bootstrap
+  to-do, mindful of the §7 traps (disabled rows still claim chords; no two
+  rows on one chord). Verify every switch by polling, since an enabled
+  binding can still fail (⌃8 does), and fall back on a timeout.
 - **To do: script layer 0 instead of README manual steps.** `bootstrap.sh`
   only symlinks. Keyboard Shortcuts rows (input source, desktop switching)
   can be written with `defaults write com.apple.symbolichotkeys` +
