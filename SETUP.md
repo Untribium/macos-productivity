@@ -324,7 +324,7 @@ binding, no exceptions. Machine-readable counterpart:
 | `caps+shift+h/j/k/l` | select ← ↓ ↑ → | 1 | Hammerspoon | nav — free; modifiers pass through with fn stripped |
 | `caps+alt+h/l` | word ← → | 1 | Hammerspoon | nav — free, same mechanism |
 | `caps+space` | cycle input source (next, one direction) | 1 | Hammerspoon | **done** — re-emits hyper+space; OS shortcut holds the layout list |
-| `` cmd+` `` (key left of 1, keycode 50 here) | cycle the frontmost app's windows across spaces/displays, MRU, **like cmd+tab**: each press selects, releasing cmd switches once; a quick tap toggles to the last window; holding (`overlayDelay`, 0.3 s) or a 2nd press shows a glass-style list (title, desktop) with the selection (a flat **system-accent** pill; text white or dark by WCAG contrast; accent and light/dark read on every draw) fixed at screen centre and the list sliding under it; the current window is selectable; `cmd+shift` reverses, Escape cancels | 2 | Hammerspoon `hs.hotkey` + `hs.canvas` | **PoC** (2026-10-25) — `modules/wincycle.lua`; `overlay = false` in `keymap.lua` gives the plain toggle |
+| `` cmd+` `` (key left of 1, keycode 50 here) | cycle the frontmost app's windows across spaces/displays, MRU, **like cmd+tab**: each press selects, releasing cmd switches once; a quick tap toggles to the last window; holding (`overlayDelay`, 0.3 s) or a 2nd press shows a glass-style list (the revealing press does not move the selection) (title, desktop) with the selection (a flat **system-accent** pill; text white or dark by WCAG contrast; accent and light/dark read on every draw) fixed at screen centre and the list sliding under it; the current window is selectable; `cmd+shift` reverses, Escape cancels | 2 | Hammerspoon `hs.hotkey` + `hs.canvas` | **PoC** (2026-10-25) — `modules/wincycle.lua`; `overlay = false` in `keymap.lua` gives the plain toggle |
 
 *(everything else pending the per-subtopic chats)*
 
@@ -1146,7 +1146,8 @@ return M
 -- releasing cmd focuses the selection, once, and commits it as MRU. A quick
 -- tap therefore toggles to the last-used window with no overlay. From the
 -- second press, or once cmd has been held for overlayDelay, an overlay lists
--- the windows (title, desktop) and further presses move the highlight. Escape cancels. Release
+-- the windows (title, desktop). The press that reveals it does not move the
+-- selection; later presses do. Escape cancels. Release
 -- is detected by polling the modifiers every 20 ms while a cycle is open.
 -- That avoids a flagsChanged event tap (SETUP.md §8: one tap owns fn).
 
@@ -1464,8 +1465,13 @@ local function step(delta)
     if not startCycle(app, fw and fw:id()) then return end
   end
   cycle.presses = cycle.presses + 1
-  local n = #cycle.list
-  cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
+  -- a press that reveals the overlay only shows the list; it does not also
+  -- move the selection, so the list opens on the window the first press picked
+  local reveals = M.overlayEnabled and cycle.presses >= 2 and not M.canvas
+  if not reveals then
+    local n = #cycle.list
+    cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
+  end
   if not M.overlayEnabled then return end
   -- overlay on the second press, or once cmd has been held for overlayDelay;
   -- a quick tap releases first and never sees it

@@ -21,7 +21,8 @@
 -- releasing cmd focuses the selection, once, and commits it as MRU. A quick
 -- tap therefore toggles to the last-used window with no overlay. From the
 -- second press, or once cmd has been held for overlayDelay, an overlay lists
--- the windows (title, desktop) and further presses move the highlight. Escape cancels. Release
+-- the windows (title, desktop). The press that reveals it does not move the
+-- selection; later presses do. Escape cancels. Release
 -- is detected by polling the modifiers every 20 ms while a cycle is open.
 -- That avoids a flagsChanged event tap (SETUP.md §8: one tap owns fn).
 
@@ -339,8 +340,13 @@ local function step(delta)
     if not startCycle(app, fw and fw:id()) then return end
   end
   cycle.presses = cycle.presses + 1
-  local n = #cycle.list
-  cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
+  -- a press that reveals the overlay only shows the list; it does not also
+  -- move the selection, so the list opens on the window the first press picked
+  local reveals = M.overlayEnabled and cycle.presses >= 2 and not M.canvas
+  if not reveals then
+    local n = #cycle.list
+    cycle.idx = ((cycle.idx - 1 + delta) % n) + 1
+  end
   if not M.overlayEnabled then return end
   -- overlay on the second press, or once cmd has been held for overlayDelay;
   -- a quick tap releases first and never sees it
