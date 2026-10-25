@@ -21,7 +21,7 @@
 > Any chat that changes a binding, a tool choice, or a layer boundary must
 > produce a diff to this file. If something isn't in here, it isn't decided.
 
-**Status:** architecture decided; nav layer built and verified; repo scaffolded
+**Status:** architecture decided; nav layer built and verified; repo live via symlinks; window-cycling target set, building next
 **Last updated:** 2026-10-25
 
 ---
@@ -172,10 +172,10 @@ reboots and machine changes.
 
 | Field | Value |
 |---|---|
-| macOS version | 26.6.2 (25G83) Tahoe |
+| macOS version | 27.0.1 (this machine, as of 2026-10-25; was 26.6.2 when §1–§5 were written) |
 | Hardware | laptop + 2 externals (office set ≠ home set) |
 | Keyboards | built-in; Zeal60 rev3 (VIA, stock caps lock) |
-| Input sources | three layouts, cycled in one direction |
+| Input sources | work machine: US ×2 + CH, cycled in one direction. This (personal) machine: ABC (Apple's US) + Swiss German. See §7 "Input source switching" for why work has two US layouts |
 | Admin rights | **none** |
 | Shell | *(fill in)* |
 | Dotfiles repo | `~/Projects/claude/macos-productivity` — this repo. Whether it merges into a larger dotfiles repo later is open; §0 assumes it stands alone. |
@@ -296,7 +296,8 @@ the only latency is the finger.
 | `alt` + key | **unallocated** | a candidate for window ops, not a decision — see §7 |
 | `alt+shift` + key | **unallocated** | same |
 | `ctrl` + key | **do not take** | emacs bindings, readline, IDE |
-| `cmd` + key | **macOS / apps — do not take** | breaks app menus |
+| `cmd` + key | **macOS / apps — do not take** | breaks app menus. **One deliberate exception below** |
+| `cmd` + key left of `1` (`cmd+shift` reverse) | **window cycling within the app, across spaces and displays** | replaces macOS's own "Move focus to next window" (`` cmd+` ``). Bound by **physical key (keycode), not character**, because the key's keycode differs by keyboard (§7). Decided 2026-10-25, §8; not built yet |
 | `hyper` (ctrl+alt+cmd+shift) | **private channel: tap → OS shortcuts** | not hand-reachable on either keyboard; used to address native shortcuts that the recorder will not let fn reach |
 | leader key sequences | not adopted | |
 
@@ -357,7 +358,7 @@ collide and something has to move. That is a real cost of the modifier choice in
 | Window moving & resizing (halves) | **next** | architecture | primary window use case. **First question is which modifier** — see §7 |
 | Displays & multi-monitor | ready | architecture | must handle office/home monitor swap |
 | Space management | **blocked on verification** | `hs.spaces` test | may be dropped entirely |
-| Window switching (focus) | ready | architecture | see Esc/backtick note in open questions |
+| Window switching (focus) | **in progress** (target set 2026-10-25) | architecture | not a switcher: `` cmd+` `` cycling the app's windows **across spaces**, MRU. Findings re-verified; see §7 "Window cycling across spaces" |
 | Launcher & app switching | ready | architecture | Spotlight + direct-launch binds |
 | Zeal60 firmware & physical layout | ready | nav layer | modifier row parity, Esc/backtick position, QMK fn audit |
 | Browser | **needs own chat** | nav layer | choice of browser, extensions, scrolling, keyboard nav |
@@ -429,6 +430,65 @@ collide and something has to move. That is a real cost of the modifier choice in
   entry, not a change to `fnlayer.lua`. This question is about namespace and
   ergonomics only.
 
+**Window cycling across spaces (target set 2026-10-25)**
+
+- **Target:** `` cmd+` `` cycles through **all windows of the frontmost app**,
+  across spaces and displays. **Not a switcher**: no overlay, no list.
+  Motivating case: Webex call and chat, or several Chrome windows, spread
+  over spaces and monitors. Switching display B to another space strands the
+  chat window, and cmd+` from the meeting window on display A must still
+  reach it.
+- **Decided scope:**
+  - **MRU order.** Each press goes to the app's most recently used other
+    window. The cache already holds handles; each entry gains a last-focused
+    time, updated from focus events.
+  - **Minimized windows ignored** for now. Adapt if it matters in practice.
+  - **Full-screen spaces out of scope.** The user never uses full screen.
+- **Mechanism, from the re-verified findings** (`docs/attic/README.md` table,
+  `docs/verification/2026-10-25-*`):
+  - Cache handles as windows are seen on visible spaces. They stay usable
+    off-space, and `focus()` on one switches straight to its space with that
+    window in front.
+  - `app:focusedWindow()`/`mainWindow()` give each app's frontmost window on
+    any space, with no visit needed.
+  - The gap: an app's *other* windows on a space not seen since load. This is
+    a macOS limit (AppKit space-filters `kAXWindows`). The only full fix is
+    AltTab's private `_AXUIElementCreateWithRemoteToken` brute force: native
+    code, an undocumented API, and it must stay off the main thread, which
+    the fn tap shares. A last resort only.
+  - Plain `hs.hotkey`, **no new event tap**.
+- **Open, in rough order:**
+  1. **What does native `` cmd+` `` do across spaces on 27.0.1**, and the
+     `cmd+tab` → ↓ combination (App Exposé) that shows an app's windows
+     across spaces? Test with two Chrome windows on different desktops
+     before replacing anything.
+  2. **Which key, exactly.** The user presses "the key left of 1". Bind by
+     keycode, which does not change with input layout. But that key's
+     keycode depends on the keyboard: on ISO hardware (CH built-in) it is
+     `§`, keycode **10**, and macOS swaps 10↔50 for ISO boards; on ANSI it
+     is grave, keycode **50**. **On the Zeal60 the key left of 1 is Esc
+     (keycode 53)**, so a position-based binding there is `cmd+Esc`, while
+     the character `` ` `` is an fn-chord (see the Zeal60 note below). Probe:
+     log the keycode on each keyboard, then pick per-keyboard keycodes, or
+     one binding plus firmware parity.
+  3. **Catching off-space windows from AX notifications.** AltTab's
+     `src/windowserver/README.md` says AX notifications carry the window
+     element without any space filter. Per-app `hs.axuielement.observer` on
+     the frontmost app would then fill the cache whenever an off-space
+     window announces something. Probe it.
+  4. **Webex.** Are the call and chat windows the same process? If not,
+     "same app" will not link them. Probe with a free account on this
+     machine, after Chrome works.
+  5. **Window id reuse after app restart** (attic finding 4), for cache
+     pruning.
+  6. **Later: detecting unknown windows.** Learn each space's non-window ids
+     on visit; afterwards, a new unclassified id means a window opened there
+     unseen. Ids carry no owner (`hs.window.list` is on-screen only), so the
+     signal is per space, not per app. If built, surface it as **a
+     notification with a "refresh" button** that steps through the affected
+     spaces and returns. **Never automatic.** Needs probes: are noise ids
+     stable off-space, and do synthetic ⌃N presses switch reliably?
+
 **Input source switching — resolved, with a trap worth remembering**
 
 - Resolved: no layout list lives in the config. The tap re-emits hyper+space and
@@ -445,6 +505,16 @@ collide and something has to move. That is a real cost of the modifier choice in
     `activateSettings -u` to reload without logging out.
 - More generally: when a Keyboard Shortcuts binding misbehaves, read the plist
   before believing the pane.
+- **To investigate some day: layout switching is still a pain.** Two ideas:
+  - **Automatic layout per app.** Is it feasible? Hammerspoon can see app
+    activation, and `hs.keycodes` can read and set the current source, but
+    `setLayout` breaks on IMEs (§8). Possibly too hard; noted, not planned.
+  - **Why work has two US layouts.** The hardware there is CH (ISO), and
+    with macOS's own US layout `` ` `` and `~` were not where they should be.
+    That is likely the ISO keycode swap (10 ↔ 50), which is widely reported
+    and leaks into browsers. Check whether the default US layout now behaves
+    on the work machine, so it can drop the second US layout. This machine
+    uses ABC + Swiss German.
 
 **Zeal60**
 
@@ -466,6 +536,8 @@ collide and something has to move. That is a real cost of the modifier choice in
   binding. Feeds the window-switching subtopic: prefer a binding of our own that
   is comfortable on both keyboards over inheriting `` cmd+` ``. Note `` cmd+` ``
   is in the "do not take" row, so shadowing it needs a decision-log entry.
+  **Update 2026-10-25:** shadowing it is now decided (§8), and the binding is
+  by physical key; see "Window cycling across spaces" item 2.
 
 **Browser**
 
@@ -517,6 +589,8 @@ Append-only. Each entry: what was decided, why, and what it rules out.
 | 2026-10-25 | Hammerspoon is driven from the shell through **fixed `hammerspoon://` URL endpoints** (`reload`, `status`), never `hs.ipc` | `hs.ipc` lets any process running as the user run arbitrary Lua, and so borrow Hammerspoon's Accessibility grant for keylogging and synthetic input, which macOS would otherwise block per app. Parameterless endpoints cap the worst case at a reload or a rewritten status file, and still cover reloading and status checks from a native session. | `hs.ipc` / `hs -c`, except temporarily for one session and removed afterwards; endpoints that take params or evaluate input |
 | 2026-10-25 | Running-config diagnostics go to files in a gitignored `<repo>/.live/` (log, console dump, status with per-module `diag.provide()` sections); the config watcher starts before any module | A shell session cannot see the Hammerspoon console, and switcher work needs the window cache visible without one. Files are output only, so this adds observability without adding input surface. The watcher order means a module that fails to load can still be fixed by saving a file. | Debugging by asking the user to copy console text; module state exposed by evaluating Lua; synthetic keypresses from the shell (would need Accessibility for the terminal) |
 | 2026-10-25 | **Correction to the `hs.ipc` row above:** the endpoints are a convenience and a narrow interface, **not a security boundary**. Added `hammerspoon://probe` and a gitignored `hammerspoon/probes/active.lua` probe runner | That row's rationale was overstated. The config itself is the way in: any process running as the user can write `.lua` into the watched directory, or edit it and relaunch Hammerspoon, and so already borrow the Accessibility grant. That is true of every Hammerspoon install and is not fixable without admin (a root-owned config); disabling the watcher only delays it. So running probe code from a file in the repo adds no exposure beyond the config. Real mitigations: grant Hammerspoon nothing beyond Accessibility; config changes are visible in git; review edits to `hammerspoon/`, including Claude's. | Disabling auto-reload as a security measure; `chflags uchg` (the user can clear it); treating `hs.ipc` as the main risk. `hs.ipc` stays out, because the endpoints are enough, not for security |
+| 2026-10-25 | Window switching target: **`` cmd+` `` cycles the frontmost app's windows across spaces and displays, MRU order**; minimized windows ignored; full screen out of scope. **No switcher or overlay**, at least initially | The real need is reaching the *other* window of the same app (Webex call ↔ chat, several Chrome windows) after spaces have moved under it. Per-app MRU covers that with a plain hotkey: no overlay, no modifier-release tap, no new event tap. The cache of captured handles plus `focusedWindow`/`mainWindow` was re-verified as sufficient, except for windows never seen since load. | `winswitch.lua`-style system-wide alt+tab switcher with overlay (for now); including minimized windows; full-screen support |
+| 2026-10-25 | **Exception to the `cmd` "do not take" row:** the key left of `1` (with `cmd`, and `cmd+shift` for reverse) is taken for window cycling, bound by **keycode**, not character | It replaces macOS's own window-cycling shortcut on the same key, so no app binding is lost. Keycodes are layout-independent, so switching CH/US input does not move the binding. Characters are not: `` ` `` lives on different physical keys per layout and per ISO/ANSI hardware. | Binding by character (`hs.hotkey` with `` "`" ``); a new chord elsewhere just for the 60% before the keycode probe has run |
 
 ---
 
