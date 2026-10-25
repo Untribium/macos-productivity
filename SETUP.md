@@ -543,8 +543,9 @@ embedded in this document so a chat that receives it sees both.
 Nav layer verified working on both keyboards, 2026-08-30. Split into modules
 2026-08-30. Moved into the repo and given a symlink-aware config watcher
 2026-09-01. Linked live by `bootstrap.sh` 2026-10-25, when `urlctl.lua` was
-also added; auto-reload through the link was verified the same day. **Still to
-re-verify by hand: `caps+hjkl`, lone-tap Escape, `caps+space`.**
+also added; auto-reload through the link was verified the same day, and
+`caps+hjkl`, lone-tap Escape and `caps+space` were re-verified by hand on the
+linked config (2026-10-25).
 
 ### `hammerspoon/init.lua` → `~/.hammerspoon/init.lua`
 
