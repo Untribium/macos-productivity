@@ -720,6 +720,9 @@ what Hammerspoon reads; the arrow is the symlink `bootstrap.sh` creates.
 | `keymap.lua` | `hammerspoon/config/keymap.lua` | → `~/.hammerspoon/config/` | bindings as data; machine-readable twin of §5 |
 | `fnlayer.lua` | `hammerspoon/modules/fnlayer.lua` | → `~/.hammerspoon/modules/` | 1 — **sole owner of the fn tap** |
 | `wincycle.lua` | `hammerspoon/modules/wincycle.lua` | → `~/.hammerspoon/modules/` | 2 — `` cmd+` `` across spaces; window cache, per-app AX observers, no event tap |
+| `citrixfocus.lua` | `hammerspoon/modules/citrixfocus.lua` | → `~/.hammerspoon/modules/` | none — Citrix Viewer workaround: a mouse move on activation clears focus from the hidden toolbar notch (Workspace 2609) |
+| `citrixsignin.lua` | `hammerspoon/modules/citrixsignin.lua` | → `~/.hammerspoon/modules/` | none — types the email and presses Return when the Citrix sign-in window gains focus, once per window. The window is focused *before* its title is set, so it also listens for title changes |
+| `local.lua` | `hammerspoon/config/local.lua` | → `~/.hammerspoon/config/` | none — machine-local values (`citrixEmail`); **gitignored**, so a fresh clone must create it |
 | `bootstrap.sh` | `bootstrap.sh` | — | creates the three symlinks above; dry run by default |
 | `urlctl.lua` | `hammerspoon/modules/urlctl.lua` | → `~/.hammerspoon/modules/` | none — `hammerspoon://reload` and `://status` endpoints; writes `.live/status.json` |
 | `probes/` | `hammerspoon/probes/` | — *(read from the repo path by `init.lua`; not linked)* | none — `README.md` tracked; `active.lua` gitignored, run on load by `init.lua` |

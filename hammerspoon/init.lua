@@ -54,6 +54,8 @@ local fnlayer = require("modules.fnlayer")
 
 fnlayer.start(keymap.fn)
 require("modules.wincycle").start(keymap.wincycle)
+require("modules.citrixfocus").start(keymap.citrixfocus)
+require("modules.citrixsignin").start(keymap.citrixsignin)
 
 -- Optional, gitignored probe (probes/README.md). Caught, so a broken probe
 -- cannot take the config down with it.

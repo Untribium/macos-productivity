@@ -43,5 +43,15 @@ return {
   -- sends 10 there instead: check on the work machine.
   -- overlay = false gives a plain toggle/cycle with no list (switch on release
   -- either way). The overlay shows on the 2nd press, or after overlayDelay s held.
-  wincycle = { mods = { "cmd" }, keycodes = { 50 }, overlay = true, overlayDelay = 0.3 },
+  wincycle = { mods = { "cmd" }, keycodes = { 10 }, overlay = true, overlayDelay = 0.3 },
+
+  -- Not a binding: Citrix Viewer workaround (modules/citrixfocus.lua). On
+  -- activation, a mouse move clears keyboard focus from the hidden toolbar
+  -- notch. restoreCursor = false if focus returns to the notch.
+  citrixfocus = { enabled = true, appName = "Citrix Viewer", delay = 0.15, restoreCursor = true, restoreDelay = 0.05 },
+
+  -- Not a binding: types the email from config/local.lua (citrixEmail) and
+  -- presses Return when the sign-in window gains focus, once per window
+  -- (modules/citrixsignin.lua).
+  citrixsignin = { enabled = true, appName = "Citrix Workspace Authentication", titleMatch = "Sign in", delay = 0.5 },
 }
