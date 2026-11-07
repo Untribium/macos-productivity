@@ -39,11 +39,12 @@ return {
   -- cmd + key left of 1: cycle the frontmost app's windows across spaces, MRU
   -- (§4, §5, modules/wincycle.lua). cmd+shift reverses. Keycodes, not
   -- characters, so switching input layout does not move it. 50 is that key
-  -- on ANSI hardware (this machine's built-in). ISO hardware (CH) likely
-  -- sends 10 there instead: check on the work machine.
+  -- on ANSI hardware (personal built-in), 10 on ISO (work laptop, CH).
+  -- Both are bound until per-machine config exists (SETUP.md §7); on ISO,
+  -- 50 is another physical key, so watch for a stray binding there.
   -- overlay = false gives a plain toggle/cycle with no list (switch on release
   -- either way). The overlay shows on the 2nd press, or after overlayDelay s held.
-  wincycle = { mods = { "cmd" }, keycodes = { 10 }, overlay = true, overlayDelay = 0.3 },
+  wincycle = { mods = { "cmd" }, keycodes = { 50, 10 }, overlay = true, overlayDelay = 0.3 },
 
   -- Not a binding: Citrix Viewer workaround (modules/citrixfocus.lua). On
   -- activation, a mouse move clears keyboard focus from the hidden toolbar

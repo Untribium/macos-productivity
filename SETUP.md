@@ -324,7 +324,7 @@ binding, no exceptions. Machine-readable counterpart:
 | `caps+shift+h/j/k/l` | select ← ↓ ↑ → | 1 | Hammerspoon | nav — free; modifiers pass through with fn stripped |
 | `caps+alt+h/l` | word ← → | 1 | Hammerspoon | nav — free, same mechanism |
 | `caps+space` | cycle input source (next, one direction) | 1 | Hammerspoon | **done** — re-emits hyper+space; OS shortcut holds the layout list |
-| `` cmd+` `` (key left of 1, keycode 50 here) | cycle the frontmost app's windows across spaces/displays, MRU, **like cmd+tab**: each press selects, releasing cmd switches once; a quick tap toggles to the last window; holding (`overlayDelay`, 0.3 s) or a 2nd press shows a glass-style list (the revealing press does not move the selection) (title, desktop) with the selection (a flat **system-accent** pill; text white or dark by WCAG contrast; accent and light/dark read on every draw) fixed at screen centre and the list sliding under it; the current window is selectable; `cmd+shift` reverses, Escape cancels | 2 | Hammerspoon `hs.hotkey` + `hs.canvas` | **PoC** (2026-10-25) — `modules/wincycle.lua`; `overlay = false` in `keymap.lua` gives the plain toggle |
+| `` cmd+` `` (key left of 1: keycode 50 ANSI, 10 ISO; both bound) | cycle the frontmost app's windows across spaces/displays, MRU, **like cmd+tab**: each press selects, releasing cmd switches once; a quick tap toggles to the last window; holding (`overlayDelay`, 0.3 s) or a 2nd press shows a glass-style list (the revealing press does not move the selection) (title, desktop) with the selection (a flat **system-accent** pill; text white or dark by WCAG contrast; accent and light/dark read on every draw) fixed at screen centre and the list sliding under it; the current window is selectable; `cmd+shift` reverses, Escape cancels | 2 | Hammerspoon `hs.hotkey` + `hs.canvas` | **PoC** (2026-10-25) — `modules/wincycle.lua`; `overlay = false` in `keymap.lua` gives the plain toggle |
 
 *(everything else pending the per-subtopic chats)*
 
@@ -592,6 +592,19 @@ collide and something has to move. That is a real cost of the modifier choice in
 - **Later (user, 2026-10-25): the reload alert is ugly.** `init.lua` uses a
   plain `hs.alert`. Restyle it, e.g. a small transient `hs.canvas` toast reusing
   the wincycle overlay's glass palette (`modules/wincycle.lua` `palette()`).
+- **To do (user, 2026-11-07): a per-machine config mechanism.** Everything in
+  `keymap.lua` and `init.lua` currently loads on every machine; only
+  `config/local.lua` (gitignored, one value) is per machine. The Citrix
+  modules only make sense on the work laptop, and the wincycle keycode
+  differs per keyboard (10 on the work ISO board, 50 on this ANSI
+  built-in). Stopgap: `keycodes = { 50, 10 }` on every machine. On ISO, 50
+  is a different physical key, so this may cause a stray binding there;
+  watch for it. Needed: a way for each machine to choose its modules and
+  override values. Rough shape (user): enable modules per machine and, for
+  each, define the keys it uses. Alternative for keys like this one: a
+  one-time "press the key left of 1" capture that stores the keycode
+  locally (in `config/local.lua` or similar), so nobody has to know
+  keycodes.
 - **To do: script layer 0 instead of README manual steps.** `bootstrap.sh`
   only symlinks. Keyboard Shortcuts rows (input source, desktop switching)
   can be written with `defaults write com.apple.symbolichotkeys` +
