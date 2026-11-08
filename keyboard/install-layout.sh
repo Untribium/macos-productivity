@@ -16,6 +16,14 @@
 # list, which can be stale (docs/verification/2026-11-08-us-iso-fix-layout.md):
 #   Apple layouts   com.apple.HIToolbox     AppleEnabledInputSources
 #   custom layouts  com.apple.inputsources  AppleEnabledThirdPartyInputSources
+#
+# TODO (final install script): make the layout set a choice per machine, e.g.
+#   enable US (ISO-safe)? yes/no
+#   enable Swiss German?  yes/no
+#   remove all others?    yes/no
+# This version enables both and only reports others. Removing must first
+# select a kept layout if the current one is to go (TISSelectInputSource,
+# untested), then re-check: a disable can fail silently.
 
 set -euo pipefail
 
