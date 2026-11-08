@@ -5,7 +5,8 @@
 //   hyper+Return (caps+Return via the fn layer)  toggle
 //   open -g overlay-spike://toggle               toggle (also: show, hide)
 //
-// Logs go to the unified log: log stream --predicate 'subsystem == "overlay-spike"'
+// Logs go to the unified log at notice level, which is kept (info is not):
+//   /usr/bin/log show --last 10m --predicate 'subsystem == "overlay-spike"'
 
 import AppKit
 import Carbon.HIToolbox
@@ -29,30 +30,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       onCancel: { [weak self] in self?.panel.hide() })
     panel = OverlayPanel(content: NSHostingView(rootView: view), size: NSSize(width: 640, height: 380))
     panel.onShow = { [weak self] in
-      log.info("show; frontmost: \(Self.frontmost(), privacy: .public)")
+      log.notice("show; frontmost: \(Self.frontmost(), privacy: .public)")
       self?.model.reset(items: Self.runningApps())
     }
     panel.onHide = {
       // Focus return check: this should still name the app you were in.
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-        log.info("hidden; frontmost: \(Self.frontmost(), privacy: .public)")
+        log.notice("hidden; frontmost: \(Self.frontmost(), privacy: .public)")
       }
     }
 
     hotKey = HotKey(keyCode: kVK_Return, modifiers: HotKey.hyper) { [weak self] in
-      log.info("hotkey")
+      log.notice("hotkey")
       self?.panel.toggle()
     }
     if hotKey == nil { log.error("hyper+Return is taken; hotkey not registered") }
 
     setUpStatusItem()
-    log.info("launched; hotkey \(self.hotKey == nil ? "FAILED" : "ok", privacy: .public)")
+    log.notice("launched; hotkey \(self.hotKey == nil ? "FAILED" : "ok", privacy: .public)")
   }
 
   // overlay-spike://toggle | show | hide
   func application(_ app: NSApplication, open urls: [URL]) {
     for url in urls {
-      log.info("url \(url.absoluteString, privacy: .public)")
+      log.notice("url \(url.absoluteString, privacy: .public)")
       switch url.host {
       case "show": panel.show()
       case "hide": panel.hide()
@@ -128,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } catch {
       log.error("login item: \(error.localizedDescription, privacy: .public)")
     }
-    log.info("login item now \(Self.describe(service.status), privacy: .public)")
+    log.notice("login item now \(Self.describe(service.status), privacy: .public)")
     statusItem.menu = makeMenu()
   }
 

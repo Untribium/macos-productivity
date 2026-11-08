@@ -31,7 +31,9 @@ return {
 
     -- overlay toggle — re-emits hyper+Return, which the overlay app registers
     -- as a Carbon hotkey (overlay/, SPIKE). Same pattern as space above.
-    ["return"] = { key = "return", mods = HYPER, passthrough = false },
+    -- The source is padenter, not return: macOS turns fn+Return into keypad
+    -- Enter (76) before the tap sees it (probe, 2026-11-08).
+    padenter = { key = "return", mods = HYPER, passthrough = false },
 
     -- PROPOSED, NOT DECIDED — §7. Uncomment only once a §5 row exists.
     -- u = { key = "pageup"  },
