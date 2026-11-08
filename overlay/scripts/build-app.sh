@@ -29,7 +29,11 @@ echo "built $APP"
 
 if (( INSTALL )); then
   DEST="$HOME/Applications/$NAME.app"
-  pkill -x "$NAME" || true
+  # Wait for the old instance to exit: opening while it is still quitting
+  # fails with LaunchServices error -600.
+  if pkill -x "$NAME"; then
+    for _ in {1..50}; do pgrep -qx "$NAME" || break; sleep 0.1; done
+  fi
   mkdir -p "$HOME/Applications"
   rm -rf "$DEST"
   cp -R "$APP" "$DEST"
