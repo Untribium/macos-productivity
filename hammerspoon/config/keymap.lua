@@ -29,6 +29,10 @@ return {
     -- hyper+whatever-else-you-were-holding. No layout list lives here.
     space = { key = "space", mods = HYPER, passthrough = false },
 
+    -- overlay toggle — re-emits hyper+Return, which the overlay app registers
+    -- as a Carbon hotkey (overlay/, SPIKE). Same pattern as space above.
+    ["return"] = { key = "return", mods = HYPER, passthrough = false },
+
     -- PROPOSED, NOT DECIDED — §7. Uncomment only once a §5 row exists.
     -- u = { key = "pageup"  },
     -- d = { key = "pagedown" },

@@ -324,6 +324,7 @@ binding, no exceptions. Machine-readable counterpart:
 | `caps+shift+h/j/k/l` | select ← ↓ ↑ → | 1 | Hammerspoon | nav — free; modifiers pass through with fn stripped |
 | `caps+alt+h/l` | word ← → | 1 | Hammerspoon | nav — free, same mechanism |
 | `caps+space` | cycle input source (next, one direction) | 1 | Hammerspoon | **done** — re-emits hyper+space; OS shortcut holds the layout list |
+| `caps+Return` | toggle the overlay panel | 1 | Hammerspoon → overlay app | **spike** (2026-11-08) — re-emits hyper+Return, which `overlay/` registers as a Carbon hotkey (no permissions needed) |
 | `` cmd+` `` (key left of 1: keycode 50 ANSI, 10 ISO; both bound) | cycle the frontmost app's windows across spaces/displays, MRU, **like cmd+tab**: each press selects, releasing cmd switches once; a quick tap toggles to the last window; holding (`overlayDelay`, 0.3 s) or a 2nd press shows a glass-style list (the revealing press does not move the selection) (title, desktop) with the selection (a flat **system-accent** pill; text white or dark by WCAG contrast; accent and light/dark read on every draw) fixed at screen centre and the list sliding under it; the current window is selectable; `cmd+shift` reverses, Escape cancels | 2 | Hammerspoon `hs.hotkey` + `hs.canvas` | **PoC** (2026-10-25) — `modules/wincycle.lua`; `overlay = false` in `keymap.lua` gives the plain toggle |
 
 *(everything else pending the per-subtopic chats)*

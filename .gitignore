@@ -11,3 +11,7 @@ hammerspoon/config/local.lua
 
 # Throwaway probe code; findings go in docs/verification/.
 hammerspoon/probes/active.lua
+
+# SwiftPM and app bundle output (overlay/scripts/build-app.sh).
+overlay/.build/
+overlay/build/
