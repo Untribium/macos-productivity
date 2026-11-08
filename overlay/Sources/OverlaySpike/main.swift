@@ -29,8 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       onChoose: { [weak self] in self?.launch($0) },
       onCancel: { [weak self] in self?.panel.hide() })
     panel = OverlayPanel(content: NSHostingView(rootView: view), size: NSSize(width: 640, height: 380))
-    // Clear by default: it reads like Spotlight. The menu toggles it.
-    panel.glassStyle = UserDefaults.standard.string(forKey: "glassStyle") == "regular" ? .regular : .clear
+    // Regular by default: frosted and nearly opaque over a dark background,
+    // like Spotlight. Clear lets the background show through and costs text
+    // contrast. The menu toggles it.
+    panel.glassStyle = UserDefaults.standard.string(forKey: "glassStyle") == "clear" ? .clear : .regular
     panel.onShow = { [weak self] in
       log.notice("show; frontmost: \(Self.frontmost(), privacy: .public)")
       self?.model.reset(items: Self.runningApps())

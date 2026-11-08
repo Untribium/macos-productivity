@@ -11,7 +11,8 @@ public final class OverlayPanel: NSPanel {
   private var hiding = false
   private let glass = NSGlassEffectView()
 
-  /// .regular is frosted, .clear lets far more of the background through.
+  /// .regular is frosted (Spotlight), .clear lets far more of the background
+  /// through, at a cost in text contrast.
   public var glassStyle: NSGlassEffectView.Style {
     get { glass.style }
     set { glass.style = newValue }
