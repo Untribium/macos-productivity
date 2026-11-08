@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       onChoose: { [weak self] in self?.launch($0) },
       onCancel: { [weak self] in self?.panel.hide() })
     panel = OverlayPanel(content: NSHostingView(rootView: view), size: NSSize(width: 640, height: 380))
+    // Clear by default: it reads like Spotlight. The menu toggles it.
+    panel.glassStyle = UserDefaults.standard.string(forKey: "glassStyle") == "regular" ? .regular : .clear
     panel.onShow = { [weak self] in
       log.notice("show; frontmost: \(Self.frontmost(), privacy: .public)")
       self?.model.reset(items: Self.runningApps())
@@ -101,6 +103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func makeMenu() -> NSMenu {
     let menu = NSMenu()
     menu.addItem(withTitle: "Show Overlay", action: #selector(showPanel), keyEquivalent: "").target = self
+    let clear = NSMenuItem(title: "Clear Glass", action: #selector(toggleGlass), keyEquivalent: "")
+    clear.target = self
+    clear.state = panel.glassStyle == .clear ? .on : .off
+    menu.addItem(clear)
     menu.addItem(.separator())
 
     let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
@@ -117,6 +123,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc private func showPanel() { panel.show() }
+
+  @objc private func toggleGlass() {
+    panel.glassStyle = panel.glassStyle == .clear ? .regular : .clear
+    UserDefaults.standard.set(panel.glassStyle == .clear ? "clear" : "regular", forKey: "glassStyle")
+    statusItem.menu = makeMenu()
+    panel.show()
+  }
 
   @objc private func toggleLogin() {
     let service = SMAppService.mainApp

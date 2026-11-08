@@ -9,6 +9,13 @@ public final class OverlayPanel: NSPanel {
   public var onHide: (() -> Void)?
 
   private var hiding = false
+  private let glass = NSGlassEffectView()
+
+  /// .regular is frosted, .clear lets far more of the background through.
+  public var glassStyle: NSGlassEffectView.Style {
+    get { glass.style }
+    set { glass.style = newValue }
+  }
 
   public init(content: NSView, size: NSSize, cornerRadius: CGFloat = 24) {
     super.init(
@@ -25,7 +32,6 @@ public final class OverlayPanel: NSPanel {
     hasShadow = true
 
     // Real blur of what is behind the panel, without Screen Recording.
-    let glass = NSGlassEffectView()
     glass.cornerRadius = cornerRadius
     glass.contentView = content
     contentView = glass
