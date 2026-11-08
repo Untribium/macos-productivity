@@ -106,4 +106,15 @@ smoke ok, AppKit loaded: true
 
 ## Conclusion
 
-*(to fill in)*
+**Building and running locally works.** A plain `swift build` binary (ad hoc,
+linker-signed, no quarantine) runs and loads AppKit. No Santa.
+
+- **Toolchain:** CLT 26.6, Swift 6.3.3, SDK 26.5. Above the package floor
+  (Swift 6.2 tools, macOS 26 deployment target), so `overlay/` builds as is.
+- **OS:** still 26.7.2, not yet 27.
+- **Policy:** Gatekeeper on, which does not apply to apps built on the machine.
+  MDM is **Intune** (DEP, user approved), not Jamf. Intune can manage login
+  items and privacy grants through profiles; none of that shows from here.
+
+Still open: the spike checklist in `overlay/README.md` on this machine,
+especially the login item and the hotkey under Citrix.
