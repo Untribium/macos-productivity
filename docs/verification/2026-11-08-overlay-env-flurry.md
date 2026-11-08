@@ -138,6 +138,6 @@ Home dev machine after the CLT 27.2 upgrade: Swift 6.4.2, SDK 27.2 (also ships
 26.5). Builds and runs; no MDM, no Santa.
 
 It is ahead of the work machine (Swift 6.2.4, SDK 26.2; see
-`2026-11-08-overlay-env-work.md`), so compiling here proves nothing about
+`2026-11-08-overlay-env-work-old.md`), so compiling here proves nothing about
 there. The overlay package pins Swift 6.2 language mode and a macOS 26
 deployment target, and must avoid APIs newer than the 26.2 SDK.

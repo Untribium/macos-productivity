@@ -106,4 +106,20 @@ smoke ok, AppKit loaded: true
 
 ## Conclusion
 
-*(to fill in)*
+**Building and running locally works.** A plain `swift build` binary (ad-hoc,
+linker-signed, no quarantine) runs and loads AppKit. No Santa, so there is no
+binary allowlisting.
+
+- **Toolchain:** CLT 26.3, Swift 6.2.4, SDK 26.2. This is the floor the overlay
+  code must compile against: no APIs newer than the 26.2 SDK, Swift 6.2
+  language features at most. Deployment target macOS 26.
+- **Policy:** Gatekeeper on (`assessments enabled`), which only matters for
+  quarantined downloads, so build on the machine rather than copying an app in.
+  Enrolled in Jamf MDM (DEP, user approved). Jamf can block apps by name or
+  bundle id and can manage login items and privacy grants; none of that shows
+  from here.
+
+Still open, for the spike itself: launching a `.app` bundle (not a bare
+binary), the global hotkey (including while Citrix Viewer has focus), the
+non-activating panel and focus return, registering as a login item, and the
+URL scheme from Hammerspoon.
