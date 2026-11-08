@@ -8,9 +8,9 @@
 #   ./install-layout.sh --apply  # install, then enable what is missing
 #
 # Needs no admin rights and no developer tools (JXA via osascript).
-# Enabling a custom layout needs the user's consent: a dialog, or a prompt in
-# System Settings. Enabling an already enabled custom layout prompts again, so
-# this script only asks for what is missing.
+# Enabling a custom layout needs the user's consent. The TIS enable call
+# should ask for it but never did here, so the script then opens Keyboard
+# settings for you to add the layout by hand. It only asks for what is missing.
 #
 # "Enabled" is read from the preference files, not from the live input source
 # list, which can be stale (docs/verification/2026-11-08-us-iso-fix-layout.md):
@@ -107,7 +107,7 @@ done
 say
 say "enabled now:"
 { defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null
-  defaults read com.apple.inputsources AppleEnabledThirdPartyInputSources 2>/dev/null; } \
+  defaults read com.apple.inputsources AppleEnabledThirdPartyInputSources 2>/dev/null || true; } \
   | grep '"KeyboardLayout Name"' | sed 's/.*= /  /; s/;$//'
 
 if (( ${#missing[@]} == 0 )); then
@@ -137,15 +137,16 @@ for w in "${missing[@]}"; do
   IFS='|' read -r id klid pref name <<<"$w"
   say "$(tis enable "$id")"
 done
-say
-say "A custom layout needs your consent: allow it in the dialog, or in the"
-say "System Settings prompt. Waiting up to 60 s..."
-if ! wait_enabled 60; then
-  if pgrep -xq "System Settings"; then
-    say "bringing System Settings to the front; approve the prompt there."
-    open -a "System Settings"
-    wait_enabled 60 || true
-  fi
+# TISEnableInputSource returns 0 for a custom layout but never shows the
+# consent prompt, not even after a fresh login (2026-11-08, personal Mac).
+# Adding it by hand in System Settings works, so fall back to that.
+if ! wait_enabled 3; then
+  say
+  say "not enabled yet. Opening Keyboard settings; add it by hand:"
+  say "  Text Input > Input Sources > Edit... > + > Others > US (ISO-safe) > Add"
+  open "x-apple.systempreferences:com.apple.Keyboard-Settings.extension"
+  say "waiting up to 120 s..."
+  wait_enabled 120 || true
 fi
 
 say
@@ -153,7 +154,7 @@ if wait_enabled 1; then
   say "done: all layouts enabled. Check the Input menu, then the key left of 1:"
   say "  US (ISO-safe) should give \` and ~ on every keyboard."
 else
-  say "still off. Most likely the layout was installed after this login, so"
-  say "System Settings cannot see it yet. Log out, log back in, and re-run"
+  say "still off. If US (ISO-safe) is missing under Others, the layout was"
+  say "installed after this login: log out, log back in, and re-run"
   say "  $0 --apply"
 fi
