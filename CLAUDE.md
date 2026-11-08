@@ -12,7 +12,7 @@ isn't decided.
 | `docs/keymap.md` | **Shared contract:** layer ownership, keybinding namespace, keymap | itself |
 | `hammerspoon/` | fn nav layer, window cycling, Citrix helpers (Lua, live via symlinks) | `hammerspoon/DESIGN.md` |
 | `overlay/` | Spotlight-style overlay framework + spike app (Swift) | `overlay/DESIGN.md` |
-| `todo/` | *(planned)* todo app on `OverlayKit` | |
+| `todo/` | work todo app on `OverlayKit` (design stage) | `todo/DESIGN.md` |
 | `docs/verification/` | probe results, one dated file per probe (template in its README) | |
 | `docs/attic/` | retired code kept for its learnings, never loaded | |
 | `README.md` | per-machine install, including the manual System Settings steps | |

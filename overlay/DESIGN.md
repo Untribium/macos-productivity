@@ -70,8 +70,9 @@ there; what Intune might restrict only shows with the real app:
 panel show over a full-screen Citrix session? Deferred to its own session; it
 touches the existing Citrix modules too.
 
-**Todo app.** Everything: data model, storage location (must work across
-machines, outside the repo), which views, which bindings.
+**Todo app:** designed in `todo/DESIGN.md`. What it needs from `OverlayKit`
+beyond the spike: a capture panel (single field), editing in place, and
+per-item key handling in the list.
 
 **Visual polish** (later, with the real UI): a magnifier in the search field,
 icons in rows, a softer selection than the accent pill (as Spotlight does).
