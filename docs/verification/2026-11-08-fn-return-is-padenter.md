@@ -28,7 +28,7 @@ several times, then plain Return.
 
 macOS turns fn+Return into keypad Enter (keycode 76) before the session event
 tap sees it, so a fn-layer binding on `return` (36) never matches. Bound on
-`padenter` instead (`keymap.lua`, SETUP.md §5). The app side was fine: a
+`padenter` instead (`keymap.lua`, `docs/keymap.md`). The app side was fine: a
 synthetic hyper+Return from Hammerspoon reached the Carbon hotkey.
 
 Not checked: the Zeal60. Its caps is remapped to fn by macOS too, so the same

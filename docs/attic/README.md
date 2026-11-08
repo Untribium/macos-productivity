@@ -8,7 +8,7 @@ as it was before `bootstrap.sh` replaced it (2026-10-25).
 ## `winswitch.lua` — cross-space MRU window switcher (alt+tab)
 
 Was loaded by the pre-repo `init.lua`. Rejected as a design, so it is not in
-the repo config, but worth reading before the window-switching subtopic (§6).
+the repo config, but worth reading before the window-switching subtopic (`hammerspoon/DESIGN.md`).
 
 What it established, and how each finding held up when re-checked from first
 principles on macOS 27.0.1 (2026-10-25, `docs/verification/2026-10-25-*`):
@@ -44,8 +44,8 @@ Known defects, if anyone revives it:
 - `S.escTap` is created but never started, so Escape never cancels.
 - A debug `print("TAP FIRED", …)` runs on every modifier change while loaded.
 - It is a second event tap. It does not watch fn, so it doesn't break the
-  single-tap rule in §8, but any future switcher should be checked against that rule.
-- `alt+tab` / ``alt+` `` were taken without §4/§5 namespace rows.
+  single-tap rule (`docs/keymap.md`), but any future switcher should be checked against that rule.
+- `alt+tab` / ``alt+` `` were taken without namespace or Keymap rows (`docs/keymap.md`).
 
 ## `capsnav.lua` — first nav layer
 

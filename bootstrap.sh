@@ -83,7 +83,7 @@ done
 say
 if (( APPLY )); then
   say "done. Now: Hammerspoon menu → Reload Config, then re-verify"
-  say "  caps+hjkl, lone-tap Escape, caps+space  (SETUP.md §10)"
+  say "  caps+hjkl, lone-tap Escape, caps+space  (README.md, Verify)"
   say "and check .live/status.json in the repo — its \"watching\" field is the"
   say "directory the auto-reload watcher is on; it must be the repo path."
 else

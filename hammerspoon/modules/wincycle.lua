@@ -1,6 +1,7 @@
 -- modules/wincycle.lua — cmd+` across spaces: cycle the frontmost app's
--- windows, MRU, on every space and display (SETUP.md §7 "Window cycling
--- across spaces", §8 2026-10-25). PROOF OF CONCEPT.
+-- windows, MRU, on every space and display (hammerspoon/DESIGN.md, Open
+-- questions "Window cycling across spaces"; Decision log 2026-10-25).
+-- PROOF OF CONCEPT.
 --
 -- Why a cache: no API lists an app's windows on other spaces (AppKit
 -- space-filters kAXWindows). But a handle seen once keeps working off-space,
@@ -24,7 +25,7 @@
 -- the windows (title, desktop). The press that reveals it does not move the
 -- selection; later presses do. Escape cancels. Release
 -- is detected by polling the modifiers every 20 ms while a cycle is open.
--- That avoids a flagsChanged event tap (SETUP.md §8: one tap owns fn).
+-- That avoids a flagsChanged event tap (docs/keymap.md: one tap owns fn).
 
 local diag = require("modules.diag")
 local log  = diag.logger("wincycle")

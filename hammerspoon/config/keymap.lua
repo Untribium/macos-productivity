@@ -1,5 +1,5 @@
 -- config/keymap.lua — bindings as data. This is the file you edit.
--- Machine-readable counterpart to SETUP.md §5. Keep them in sync.
+-- Machine-readable counterpart to docs/keymap.md (Keymap). Keep them in sync.
 
 local HYPER = { "ctrl", "alt", "cmd", "shift" }  -- private channel to OS shortcuts
 
@@ -18,7 +18,7 @@ local HYPER = { "ctrl", "alt", "cmd", "shift" }  -- private channel to OS shortc
 
 return {
   fn = {
-    -- nav cluster — §5, decided and verified
+    -- nav cluster — decided and verified
     h     = { key = "left"  },
     j     = { key = "down"  },
     k     = { key = "up"    },
@@ -35,7 +35,8 @@ return {
     -- Enter (76) before the tap sees it (probe, 2026-11-08).
     padenter = { key = "return", mods = HYPER, passthrough = false },
 
-    -- PROPOSED, NOT DECIDED — §7. Uncomment only once a §5 row exists.
+    -- PROPOSED, NOT DECIDED (DESIGN.md, Open questions). Uncomment only once
+    -- a Keymap row exists in docs/keymap.md.
     -- u = { key = "pageup"  },
     -- d = { key = "pagedown" },
     -- a = { key = "left",  mods = { "cmd" } },
@@ -43,10 +44,10 @@ return {
   },
 
   -- cmd + key left of 1: cycle the frontmost app's windows across spaces, MRU
-  -- (§4, §5, modules/wincycle.lua). cmd+shift reverses. Keycodes, not
+  -- (docs/keymap.md, modules/wincycle.lua). cmd+shift reverses. Keycodes, not
   -- characters, so switching input layout does not move it. 50 is that key
   -- on ANSI hardware (personal built-in), 10 on ISO (work laptop, CH).
-  -- Both are bound until per-machine config exists (SETUP.md §7); on ISO,
+  -- Both are bound until per-machine config exists (DESIGN.md); on ISO,
   -- 50 is another physical key, so watch for a stray binding there.
   -- overlay = false gives a plain toggle/cycle with no list (switch on release
   -- either way). The overlay shows on the 2nd press, or after overlayDelay s held.

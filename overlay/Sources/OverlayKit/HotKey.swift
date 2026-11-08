@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 /// it needs no Accessibility or Input Monitoring permission.
 ///
 /// Carbon cannot take fn as a modifier, so caps-layer bindings reach this
-/// through Hammerspoon's fn layer re-emitting them on hyper (SETUP.md §4).
+/// through Hammerspoon's fn layer re-emitting them on hyper (docs/keymap.md).
 public final class HotKey {
   public static let hyper = UInt32(controlKey | optionKey | cmdKey | shiftKey)
 

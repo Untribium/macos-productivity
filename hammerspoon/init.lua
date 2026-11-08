@@ -5,7 +5,7 @@
 --
 -- This file is a SYMLINK to <repo>/hammerspoon/init.lua (see bootstrap.sh).
 --
--- Manual System Settings steps this config depends on (SETUP.md §9):
+-- Manual System Settings steps this config depends on (README.md, step 3):
 --   1. Keyboard → Modifier Keys → Caps Lock = fn/Globe, set PER KEYBOARD
 --   2. Keyboard → "Press 🌐 key to" → Do Nothing        (Escape depends on this)
 --   3. Keyboard Shortcuts → Input Sources → "Select next source in Input menu"
@@ -67,7 +67,7 @@ if hs.fs.attributes(probePath) then
 end
 
 -- hammerspoon://reload, ://status, ://probe. Parameterless endpoints in
--- place of hs.ipc (SETUP.md §8). Started last so the load-time status sees
+-- place of hs.ipc (hammerspoon/DESIGN.md, Decision log). Started last so the load-time status sees
 -- every module's provider.
 require("modules.urlctl").start({ root = root, probe = probe })
 

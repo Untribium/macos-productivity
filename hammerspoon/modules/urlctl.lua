@@ -1,7 +1,7 @@
--- modules/urlctl.lua — fixed hammerspoon:// control endpoints (SETUP.md §0, §8).
+-- modules/urlctl.lua — fixed hammerspoon:// control endpoints (hammerspoon/DESIGN.md).
 --
--- A narrow interface in place of hs.ipc. NOT a security boundary (SETUP.md
--- §8): anything running as this user can already write the config, which
+-- A narrow interface in place of hs.ipc. NOT a security boundary
+-- (hammerspoon/DESIGN.md, Decision log): anything running as this user can already write the config, which
 -- this file is part of. The narrowness is about keeping the surface small
 -- and predictable, not about keeping an attacker out.
 --

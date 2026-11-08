@@ -1,12 +1,17 @@
 # macos-productivity
 
-Keyboard-driven window management on macOS, without admin rights.
-Hammerspoon owns everything above the key-remapping layer; caps lock is remapped
-to fn by macOS itself.
+Keyboard-driven macOS, without admin rights:
 
-**`SETUP.md` is the source of truth.** Tool choices, layer ownership, the keymap,
-the decision log and the open questions all live there. This file is only the
-install procedure.
+- **`hammerspoon/`**: caps lock as a nav layer (Escape on tap, `caps+hjkl`
+  arrows), window cycling across spaces, small app workarounds. Hammerspoon
+  owns everything above the key-remapping layer; caps lock is remapped to fn
+  by macOS itself.
+- **`overlay/`**: a Spotlight-style overlay framework in Swift, and apps on it.
+
+**`docs/keymap.md` is the keyboard contract** all of them share: which tool
+owns which layer, the reserved modifier combinations, and every binding. Each
+component's goals, open questions and decision log are in its `DESIGN.md`.
+This file is only the install procedure.
 
 ## Install on a new machine
 
@@ -26,11 +31,11 @@ up anything already there. `~/.hammerspoon/Spoons/` is left alone.
 
 System Settings → Privacy & Security → Accessibility → Hammerspoon.
 No admin password required. *(Open question: Input Monitoring may also be
-needed — see SETUP.md §7.)*
+needed — see `hammerspoon/DESIGN.md`, Open questions.)*
 
 ### 3. The manual System Settings steps
 
-**These are not in the repo and cannot be.** They are per-machine, and steps 1
+**These are not in the repo and cannot be.** They are per-machine, and step 1
 must be repeated for **every keyboard**. Getting any of them wrong makes the
 config look broken.
 
@@ -44,8 +49,9 @@ config look broken.
 3. **Keyboard → Keyboard Shortcuts → Input Sources →**
    "Select next source in Input menu" = `⌃⌥⇧⌘Space`,
    **and clear the "Select the previous input source" row** — unchecking it is
-   not enough, a disabled row still swallows the chord. See SETUP.md §7 for how
-   to clear it properly via `defaults`.
+   not enough, a disabled row still swallows the chord. See
+   `hammerspoon/DESIGN.md`, Open questions, for how to clear it properly via
+   `defaults`.
 
 ### 4. Verify
 
@@ -57,22 +63,29 @@ config look broken.
 - `.live/status.json` → `watching` names the directory being watched: it must
   be the **repo** path, not `~/.hammerspoon`
 
+### 5. Overlay (optional)
+
+Needs the Command Line Tools (`xcode-select --install`), no Xcode, no admin.
+
+```sh
+overlay/probes/env-check.sh             # once: can this machine build and run it?
+overlay/scripts/build-app.sh --install  # build, copy to ~/Applications, launch
+```
+
+`caps+Return` toggles it. See `overlay/README.md` for the checklist.
+
 ## Editing
 
 Add or change a binding = a two-file edit, one commit:
 
 1. `hammerspoon/config/keymap.lua` — the binding
-2. `SETUP.md` §5 — the row, plus a §8 decision-log entry if it is a real choice
+2. `docs/keymap.md` — the Keymap row, plus a decision-log entry in the owning
+   component's `DESIGN.md` if it is a real choice
 
-Check §5 for a collision **before** proposing anything, and check the "do not
-take" rows in §4.
+Check the Keymap for a collision **before** proposing anything, and check the
+"do not take" rows in the namespace.
 
 After editing, check the Hammerspoon console — `compile()` warns and skips a bad
 spec rather than aborting, so a skipped binding looks exactly like a broken one.
 
-## Working on this with Claude
-
-A Cowork session sees this folder and nothing else — not `~/.hammerspoon`, not
-System Settings, and its shell is a Linux VM, so `defaults` and `hs` are out of
-reach. Anything that needs the running Mac becomes a **probe**: a command block
-you run, with the output filed in `docs/verification/`. See SETUP.md §0.
+Working on this with Claude: see `CLAUDE.md`.

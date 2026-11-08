@@ -1,4 +1,4 @@
--- modules/fnlayer.lua — sole owner of the fn/Globe event tap (SETUP.md §3, layer 1).
+-- modules/fnlayer.lua — sole owner of the fn/Globe event tap (docs/keymap.md, layer 1).
 --
 -- INVARIANT: exactly one event tap may watch the fn flag. Two taps means
 -- nondeterministic ordering and double consumption. Anything fn-based
