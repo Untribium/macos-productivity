@@ -124,6 +124,9 @@ Built on `OverlayPanel` and the chooser pattern from the spike.
   in To Do is within policy (it is a company-managed service, so likely fine).
   Personal-machine sync, if any, is a separate question and must not touch the
   work tenant.
+- **Following links** from an item (Jira, Webex, Confluence): open them from
+  the keyboard, with control over which browser and mode (e.g. a separate
+  profile, or incognito) each kind of link opens in.
 - **Name.**
 
 ---
