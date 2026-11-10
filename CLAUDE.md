@@ -13,6 +13,7 @@ isn't decided.
 | `hammerspoon/` | fn nav layer, window cycling, Citrix helpers (Lua, live via symlinks) | `hammerspoon/DESIGN.md` |
 | `overlay/` | Spotlight-style overlay framework + spike app (Swift) | `overlay/DESIGN.md` |
 | `todo/` | work todo app on `OverlayKit` (design stage) | `todo/DESIGN.md` |
+| `docs/backlog.md` | work no component owns yet; what was kept and dropped from the old setup scripts | itself |
 | `docs/verification/` | probe results, one dated file per probe (template in its README) | |
 | `docs/attic/` | retired code kept for its learnings, never loaded | |
 | `README.md` | per-machine install, including the manual System Settings steps | |
@@ -26,6 +27,11 @@ isn't decided.
   Other components get caps bindings by having it re-emit a hyper chord.
 - **Decisions** go into the owning component's `DESIGN.md` decision log, which
   is append-only. A new tool must claim a layer in `docs/keymap.md`.
+- **Low dependency:** bash and macOS built-ins (`defaults`, `osascript`/JXA)
+  first, Python if it needs no compile step, Swift only when unavoidable. The
+  base setup stays Swift-free; the overlay is the exception, not the model.
+- **Setup scripts** are dry run by default and write only with `--apply`, like
+  `bootstrap.sh`.
 - **`hammerspoon/` is the live config** on any machine that ran
   `bootstrap.sh`: saving a file there reloads Hammerspoon immediately.
 - **Probes** that need the running Mac: Lua in `hammerspoon/probes/active.lua`

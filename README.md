@@ -35,7 +35,8 @@ needed — see `hammerspoon/DESIGN.md`, Open questions.)*
 
 ### 3. The manual System Settings steps
 
-**These are not in the repo and cannot be.** They are per-machine, and step 1
+**These are manual for now.** Automating them is an open item
+(`docs/backlog.md` › macOS defaults module). They are per-machine, and step 1
 must be repeated for **every keyboard**. Getting any of them wrong makes the
 config look broken.
 
