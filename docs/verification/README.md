@@ -50,4 +50,5 @@ Rules:
 |---|---|---|
 | Input Monitoring | does the fn tap need it in addition to Accessibility? | `hammerspoon/DESIGN.md` |
 | `hs.spaces` on 26.6.2 | does it work reliably enough to own layer 3? | `hammerspoon/DESIGN.md` |
+| Dotfiles on work-new | what is its live vim and zsh config? (same command as `2026-11-13-dotfiles-work-old.md`) | `docs/backlog.md` |
 | Zeal60 VIA fn audit | is its fn a plain `MO()`, and does it send a real fn keycode? | `hammerspoon/DESIGN.md` |

@@ -63,6 +63,14 @@ Needs a spike first: which shell, and which config preset (grml, a framework,
 or none). Note for `docs/keymap.md`: the old config binds
 `ctrl+h/j/k/l/p` shell-locally, inside the `ctrl` "do not take" row.
 
+- **Superseded (user, 2026-11-13):** the `ctrl+j/k` bindings for history and
+  menus, in the shell, the vim command line and IntelliJ: the caps nav layer
+  gives arrows everywhere.
+- **Review the rest one by one** in a separate session, combining both
+  machines. Snapshots of the live vim and zsh config, one per machine:
+  `docs/verification/2026-11-13-dotfiles-work-old.md`; work-new still to do.
+  The vimrc (shared by vim, neovim and IdeaVim) belongs in the same review.
+
 ## IntelliJ
 
 IdeaVIM plugin, `~/.ideavimrc` (the old one sourced a `~/.vim/vimrc` that was
@@ -79,9 +87,19 @@ Both are wanted. Prefer zero dependencies if simple enough:
   calls IOBluetooth's private power function
   (`IOBluetoothPreferenceSetControllerPowerState`). Needs a probe: whether JXA
   can bind that function, and whether it needs a permission.
-- **Cursorcerer** (hide the cursor after 5 s idle): needs a persistent process
-  and private CoreGraphics calls to hide the cursor from the background. No
-  good fit in bash, JXA or Hammerspoon. Likely keep the real app
+- **Cursorcerer** (hide the cursor after 5 s idle). What the binary does
+  (from `nm -u` and `strings`, 2026-11-10): one private call,
+  `CGSSetConnectionProperty(_CGSDefaultConnection(), conn,
+  "SetsCursorInBackground", kCFBooleanTrue)`, so macOS honours hide requests
+  from a non-frontmost process; then public `CGDisplayHideCursor` /
+  `CGDisplayShowCursor` on `CGMainDisplayID()`, with `CGCursorIsVisible`.
+  Idle detection is an `NSTimer` (probably polling the mouse via `NSEvent`);
+  the toggle hotkey is Carbon `RegisterEventHotKey`. The hidden state belongs
+  to the process, so something must stay running. Zero-dependency candidate:
+  a long-running JXA script under a LaunchAgent, binding those functions with
+  `ObjC.bindFunction` and polling. Hammerspoon cannot call arbitrary C. Needs a
+  probe: whether JXA can bind the private CGS symbols, and whether a
+  never-exiting `osascript` behaves under launchd. Fallback: keep the real app
   (`defaults write com.doomlaser.cursorcerer idleHide -float 5`).
 
 ## Reference: hidutil + LaunchAgent
