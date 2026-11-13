@@ -97,7 +97,8 @@ or none). Note for `docs/keymap.md`: the old config binds
   gives arrows everywhere.
 - **Review the rest one by one** in a separate session, combining both
   machines. Snapshots of the live vim and zsh config, one per machine:
-  `docs/verification/2026-11-13-dotfiles-work-old.md`; work-new still to do.
+  `docs/verification/2026-11-13-dotfiles-work-old.md` and
+  `docs/verification/2026-11-13-dotfiles-home.md`; work-new has none.
   The vimrc (shared by vim, neovim and IdeaVim) belongs in the same review.
 - **vimrc reviewed (user, 2026-11-22),** installed by hand on work-new as
   `~/.vim/vimrc` + empty `~/.vim/vimrc.local`. Kept: all settings (number,
