@@ -1,0 +1,269 @@
+# TODO consider splitting this file into "plugins", i.e. lprompt, rprompt, vi-mode, etc.
+
+## aliases (general)
+alias q='exit'
+alias c='clear'
+
+## aliases (applications)
+alias v='nvim'
+alias tf='terraform'
+
+# use ctrl+p to push current input to buffer stack, will be auto-popped i.e. pasted after next command
+# e.g. start writing git commit, ctrl+p, run git diff, resume commit message
+bindkey -M viins '^p' push-input
+
+## open command output in vim
+iv() {
+    "$@" | v +':setlocal buftype=nofile' -
+}
+
+## prompt
+
+# store previous exit code in variable for use in prompt
+function precmd() {
+    EXIT_CODE=$?
+}
+
+# custom grml prompt tokens, see http://bewatermyfriend.org/p/2013/003/
+# fixed-width, right-alinged path with › padding and highlighted / in path for readability
+function fancy_path() {
+    # percentage of terminal window to fill with path
+    local _path_percent=25
+    # num characters to use for path
+    local _path_chars=$((${COLUMNS}*${_path_percent}/100))
+    # working dir (~ for HOME)
+    local _path=$(print -rD $PWD)
+    # length of working dir 
+    local _length=${#_path}
+    
+    # make space for error code if non-zero by reducing path length
+    if [[ $EXIT_CODE != 0 ]]; then
+        _path_chars=$(( $_path_chars - ${#EXIT_CODE} - 1 )) # -1 for trailing space
+    fi
+
+    # if path too long to fit...
+    if (( $_length > $_path_chars )); then
+        # ...right-substring and add ellipsis 
+        _path="...${_path: -$(( $_path_chars - 3 ))}"
+    fi
+
+    # make / and ... white
+    _path=$(echo "$_path" | sed 's/\//%F{white}\/%F{3}/g; s/\.\.\./%F{white}\.\.\.%F{3}/g')
+
+    # left-pad with ›, right-substring to path_chars, color path yellow (3)
+    # %n>>(string)%>>       left-substring to n characters
+    # %(?.x.y)              if error then red else green
+    # %B(string)%b          bold
+    # ${(l[num][char])}     repeat char num times
+    # %?                    exit code
+    # %F{(color)}           set color (by name or code)
+    REPLY="%(?..%F{red}%B%? %b)%$_path_chars<<%F{230}${(l[$_path_chars][›])} %B%F{3}$_path%b%<< "
+}
+
+grml_theme_add_token fancy_error -f fancy_error
+grml_theme_add_token fancy_path -f fancy_path
+
+### TODO investigate possible performance improvements for git prompt (early exit, caching, etc.)
+
+function vi-git-st-remote() {
+    ## commits ahead and behind remote
+    local ahead behind
+    local -a gitstatus
+
+    # if detached, set 'DETACHED' and exit
+    if [ -z "$(git branch --show-current 2> /dev/null)" ]; then
+    hook_com[misc]+="%F{rose}%K{red} DETACHED %k%f"
+    return 0
+    fi
+
+    # if not tracking, set 'not tracking' and exit
+    if ! git rev-parse --abbrev-ref ${hook_com[branch]}@{upstream} &> /dev/null; then
+    hook_com[misc]+="%F{yellow} no track"
+    return 0
+    fi
+
+    local -a ahead_and_behind=(
+        $(git rev-list --left-right --count HEAD...${hook_com[branch]}@{upstream} 2> /dev/null)
+    )
+
+    ahead=${ahead_and_behind[1]}
+    behind=${ahead_and_behind[2]}
+
+    # up to date
+    (( ! $ahead )) && (( ! $behind )) && gitstatus+=( "%F{green} up to date" )
+
+    # diverged
+    (( $ahead )) && (( $behind )) && gitstatus+=( "%F{red}! " )
+
+    (( $ahead )) && gitstatus+=( "%F{green}+${ahead}" )
+    (( $behind )) && gitstatus+=( "%F{red}-${behind}" )
+
+    hook_com[misc]+=${(j::)gitstatus}
+}
+
+function vi-git-st-files() {
+    hook_com[staged]=''
+    hook_com[unstaged]=''
+
+    ## count of stashes
+    local -a stashes
+
+    if [[ -s ${hook_com[base]}/.git/refs/stash ]] ; then
+        stashes=$(git stash list &> /dev/null | wc -l | tr -d ' ')
+        hook_com[unstaged]+="%F{8} [${stashes}]"
+    fi
+
+    ## counts for every type of change in status
+    local files
+    files=$(git status --porcelain=v1 -uall 2> /dev/null)
+
+    # set 'no changes' and return early if no files have been changed
+    if [ -z "$files" ]; then
+        hook_com[staged]+="%F{blue} no changes"
+        return 0
+    fi
+
+    declare -A staged unstaged # associative arrays for unstaged and staged file counts
+
+    while IFS= read -r file ; do
+    [ -z $file ] && continue # ignore empty lines
+    s=${file:0:1} # 1st character
+    u=${file:1:1} # 2nd character
+    [ $s != ' ' ] && ((staged[$s]++))
+    [ $u != ' ' ] && ((unstaged[$u]++))
+    done <<< $files
+
+    for key value in ${(kv)staged} ; do
+    [ $key != '?' ] && hook_com[staged]+="%F{green} $key%F{reset}:$value"
+    done
+    for key value in ${(kv)unstaged} ; do
+    hook_com[unstaged]+="%F{red} $key%F{reset}:$value"
+    done
+
+    # counts for staged insertions and deletions
+    local diffs
+    diffs=$(git diff --staged --numstat)
+
+    local insertions deletions
+    while IFS= read -r diff ; do
+    [ -z $diff ] && continue # ignore empty lines
+    (( insertions+=$(echo $diff | cut -f1) ))
+    (( deletions+=$(echo $diff | cut -f2) ))
+    done <<< $diffs
+
+    (( $insertions )) || (( $deletions )) && hook_com[staged]+=" (%F{green}+$insertions%F{red}-$deletions%F{reset})"
+}
+
+function +vi-git-st() {
+    vi-git-st-remote
+    vi-git-st-files
+}
+
+function configure_prompt() {
+
+    ## base prompt (path left, git right)
+    zstyle ':prompt:grml:left:setup' items change-root fancy_path percent
+    zstyle ':prompt:grml:right:setup' items vcs 
+
+    ## time
+    #zstyle ':prompt:grml:*:items:time' pre '%F{237}'
+    #zstyle ':prompt:grml:*:items:time' token '%D{%H:%M} '
+
+    ## path, fixed width, left-aligned
+    #zstyle ':prompt:grml:*:items:path' pre '%B%F{104}'
+    #zstyle ':prompt:grml:*:items:path' token '%24<..<%~%<< ' # max 24 chars in path
+
+    ## percent
+    zstyle ':prompt:grml:*:items:percent' pre '%F{230}'
+    zstyle ':prompt:grml:*:items:percent' post '%F{reset}'
+
+    ## git
+    autoload -U colors && colors
+    zstyle ':vcs_info:*' enable git
+    zstyle ':vcs_info:*' check-for-changes true
+    zstyle ':vcs_info:*' unstagedstr '!'
+    zstyle ':vcs_info:*' stagedstr '+'
+    zstyle ':vcs_info:git*' formats "%B%m %F{reset}|%u%c %F{reset}|%F{magenta} %b"
+
+    zstyle ':vcs_info:git*+set-message:*' hooks git-st
+}
+
+configure_prompt
+
+## show hidden files in tab complete menu
+setopt globdots
+# but don't show . and ..
+zstyle ':completion:*' special-dirs false 
+
+## shell vi mode
+# enable and allow backspace to delete
+bindkey -v '^?' backward-delete-char
+
+# allows quick toggling between modes (and maybe more)
+export KEYTIMEOUT=1
+
+# search history by prefix
+bindkey -M viins '^k' history-beginning-search-backward
+bindkey -M viins '^j' history-beginning-search-forward
+bindkey -M vicmd '^k' history-beginning-search-backward
+bindkey -M vicmd '^j' history-beginning-search-forward
+
+# ^ and $ in vicmd mode
+bindkey -M vicmd 'L' end-of-line
+bindkey -M vicmd 'H' beginning-of-line
+
+# navigate tab complete menus using vim keys
+bindkey -M menuselect 'h' vi-backward-char
+bindkey -M menuselect 'j' vi-down-line-or-history
+bindkey -M menuselect 'k' vi-up-line-or-history
+bindkey -M menuselect 'l' vi-forward-char
+
+# cursors for modes
+cursor_insert='\e[5 q' # beam
+cursor_normal='\e[1 q' # block
+
+function zle-keymap-select() {
+    if [[ ${KEYMAP} == vicmd ]] || [[ $1 = 'block' ]]; then
+        echo -ne $cursor_normal
+    elif [[ ${KEYMAP} == main ]] || [[ ${KEYMAP} == viins ]] || [[ ${KEYMAP} == '' ]] || [[ $1 == 'beam' ]]; then
+        echo -ne $cursor_insert
+    fi
+}
+
+zle -N zle-keymap-select
+zle-line-init() {
+    zle -K viins
+    echo -ne $cursor_insert
+    zle-smkx # load grml standard config
+}
+
+# yank to clipboard
+function vi-yank-clipboard() {
+    zle vi-yank
+    echo "$CUTBUFFER" | pbcopy -i
+}
+zle -N vi-yank-clipboard
+bindkey -M vicmd 'y' vi-yank-clipboard
+
+## autosuggestions
+source "$(brew --prefix zsh-autosuggestions)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+bindkey -M viins '^[[Z' forward-word # shift-tab to complete word
+bindkey -M viins '^l' forward-word # ctrl+l to complete word
+bindkey -M viins '^h' backward-kill-word # ctrl+h to delete word
+
+# define word separating characters, controls right-arrow/ctrl+l behavior in autosuggest
+#WORDCHARS=' *?_-.,[]~=&;:!#$%^(){}<>/'
+WORDCHARS=' *?_,[]~=&;:!#$%^(){}<>/'
+autoload -Uz select-word-style
+select-word-style normal
+zstyle ':zle:*' word-style unspecified
+
+## "plugins", i.e. scripts to run after
+for plugin in $ZDOTDIR/plugins/*; do
+    source "$plugin"
+done
+
+# set default path
+# (do this in .zprofile instead, so we can re-source zshrc without changing the path)
+#cd ~/Data

@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# brew (must be done before autoload)
+command -v brew > /dev/null && FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
+
+# additional autocompletions, e.g. maven
+#brew list zsh-completions &> /dev/null && FPATH="$(brew --prefix)/share/zsh-completions:${FPATH}"
+# too slow, we'll just add it no matter what
+FPATH="$(brew --prefix)/share/zsh-completions:${FPATH}" # TODO this needs an entry in the application folder
+
+# TODO investigate what exactly this does
+autoload -Uz compinit && compinit
+autoload -U +X bashcompinit && bashcompinit
+
+# angular
+command -v ng > /dev/null && source <(ng completion script)
+
+# terraform
+command -v terraform > /dev/null && complete -o nospace -C $(which terraform) terraform 
+
+# docker
+command -v docker > /dev/null && source <(docker completion zsh)
+
+# minikube
+command -v minikube > /dev/null && source <(minikube completion zsh)
+
+# kubectl
+command -v kubectl > /dev/null && source <(kubectl completion zsh)
+
+# aws
+command -v aws_completer > /dev/null && complete -C $(which aws_completer) aws
+
+# 1password
+command -v op > /dev/null && eval "$(op completion zsh)"; compdef _op op

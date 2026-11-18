@@ -1,0 +1,2 @@
+alias claude-acn='CLAUDE_CONFIG_DIR=~/.claude-acn claude'
+alias claude-bjb='CLAUDE_CONFIG_DIR=~/.claude-bjb claude'

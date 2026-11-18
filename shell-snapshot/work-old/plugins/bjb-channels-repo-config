@@ -1,0 +1,4 @@
+#!/bin/bash
+# configuration required for BJB channels repository
+eval "$(mise activate zsh)"
+eval "$(direnv hook zsh)"
