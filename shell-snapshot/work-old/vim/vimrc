@@ -1,0 +1,37 @@
+" NOTE: this is sourced by neovim from ~/.config/nvim/init.vim
+
+" line numbers
+set number
+
+" start scrolling 10 lines before hitting top/bottom line
+set scrolloff=10
+
+" tabs to spaces
+set expandtab
+set shiftwidth=4
+set tabstop=4
+
+" use system clipboard
+set clipboard^=unnamed,unnamedplus
+
+" use case-insensitive search when searching all-lowercase (but also replace...)
+set ignorecase
+set smartcase
+
+" clear search highlightung using Enter or Space
+nnoremap <silent> <CR> :noh<CR><CR>
+nnoremap <silent> <Space> :noh<CR><Space>
+
+" jump to beginning/end of line
+nnoremap H ^
+nnoremap L $
+
+" navigate command history using C-j and C-k
+cnoremap <C-j> <Down>
+cnoremap <C-k> <Up>
+
+" use qq instead of q! to exit without saving
+cnoreabbrev <expr> qq ((getcmdtype() is# ':' && getcmdline() is# 'qq')?('q!'):('qq'))
+
+" load machine-specific config
+source ~/.vim/vimrc.local

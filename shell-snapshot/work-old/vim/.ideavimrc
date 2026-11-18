@@ -1,0 +1,4 @@
+source ~/.vim/vimrc
+
+nnoremap J :tabnext<CR>
+nnoremap K :tabprev<CR>

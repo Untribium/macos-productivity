@@ -1,0 +1,29 @@
+# This is Git's per-user configuration file.
+[user]
+	name = Patrice Marti
+    email = <redacted in snapshot>
+[core]
+    editor = nvim
+[alias]
+	s = status
+	sh = status -- .
+	ss = status --short --untracked-files=all --branch
+	ssh = ss -- .
+    a = add
+    cmt = commit -v
+    bc = !git branch --show-current
+    bcc = !git bc | tr -d '\n' | pbcopy # copy current branch to clipboard
+    # use ! notation since we use a command to get columns count for wrapping ($COLUMNS isn't available here)
+    l = !git log --pretty=\"format:%w($(tput cols),0,75) %C(yellow)%h %C(blue)%<(12,trunc)%ch %C(auto)%<(35,mtrunc)%D %C(bold)%>(13,trunc)%an %C(magenta)» %C(reset)%s\"
+	lf = l --name-status
+    lg = log --all --decorate --oneline --graph
+    ignore = update-index --skip-worktree
+    unignore = update-index --no-skip-worktree
+
+
+# tig config
+[tig "bind"]
+    # copy commit hash to clipboard
+    generic = 9 !@sh -c \"printf '%s' $(git rev-parse --short %(commit)) | pbcopy\"
+[credential]
+	helper = osxkeychain
