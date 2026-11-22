@@ -161,6 +161,12 @@ judging what is on screen still need a person. There is deliberately
   timeout heuristic is the fallback — kept in the rejected table for that reason.
 - **Secure input.** Event taps are disabled in password fields and at the lock
   screen; caps→Escape will not work there. Documented limitation, not a bug.
+  **On work-new, Intune forces Secure Keyboard Entry in Terminal.app**
+  (managed `com.apple.Terminal SecureKeyboardEntry = true`), so the whole
+  config is deaf while Terminal is frontmost — no fn layer, no window
+  cycling. Not fixable from here: use another terminal app or an IDE's
+  terminal (`docs/verification/2026-11-22-work-new-system-settings.md`).
+  Check with `ioreg -l -w 0 | grep kCGSSessionSecureInputPID`.
 - **Does Hammerspoon need Input Monitoring** in addition to Accessibility for
   this tap? `docs/keymap.md` › Layer ownership currently claims Accessibility only — verify and correct if so.
 - **Layer 0 is not reproducible from the repo, and is now three GUI settings.**

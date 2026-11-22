@@ -32,16 +32,28 @@ Preferences kept from the old scripts. Plain `defaults write`, no admin:
 | Tap-to-click | `defaults -currentHost write com.apple.mouse.tapBehavior -int 1` | `keyboard/enable-tap-to-click.sh` |
 | Dock out of the way | `defaults write com.apple.dock autohide -bool true`, `autohide-delay -float 5`, then `killall Dock` | `ui/disable-dock.sh` |
 
-To probe before automating (README step 3 is manual until then):
+To probe before automating (README §3 is manual until then):
 
 - **Caps Lock → fn, per keyboard.** The old `keyboard/map-caps-to-esc.sh`
   wrote the Modifier Keys mapping directly:
   `defaults -currentHost write -g com.apple.keyboard.modifiermapping.<vendor>-<product>-0 -array-add <dict with HIDKeyboardModifierMappingSrc/Dst>`,
   with vendor and product IDs from `system_profiler`. It did caps → Esc and
-  took effect after the next login. Unknowns: the destination value for fn,
-  whether it still works on 26/27, and finding the Zeal60's IDs.
-- **"Press 🌐 key to" → Do Nothing.** Believed to be `AppleFnUsageType` in
-  `com.apple.HIToolbox` (0 = do nothing). Unverified.
+  took effect after the next login. **Values found 2026-11-22** by setting it
+  in Settings and diffing: Src `30064771129` (Caps Lock), Dst `1095216660483`
+  (`0xFF00000003`, fn); the internal keyboard's entry is `0-0-0` (`hidutil
+  list` shows vendor/product 0). Still open: whether a `defaults` write alone
+  takes effect, and the Zeal60's IDs.
+- **"Press 🌐 key to" → Do Nothing.** Confirmed 2026-11-22:
+  `com.apple.HIToolbox AppleFnUsageType = 0`. Same open question about a
+  `defaults` write alone.
+- **Input Sources shortcuts (README step 3).** Verified 2026-11-22: row 61 =
+  `(32, 49, 1966080)` enabled, row 60 = `(65535, 65535, 0)` disabled, then
+  `activateSettings -u`; no logout.
+- **Reduce Motion: cannot be scripted.** `com.apple.universalaccess` refuses
+  writes. The module can check it and open Accessibility → Display.
+
+Applied on work-new 2026-11-22 (all four rows of the table above, plus the
+shortcuts): `docs/verification/2026-11-22-work-new-system-settings.md`.
 
 The keyboard-layout install on branch `machine-setup` (`keyboard/install-layout.sh`,
 `US (ISO-safe).keylayout`) belongs alongside. It supersedes the old `hidutil`
