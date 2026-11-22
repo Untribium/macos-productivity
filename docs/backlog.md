@@ -99,6 +99,12 @@ or none). Note for `docs/keymap.md`: the old config binds
   machines. Snapshots of the live vim and zsh config, one per machine:
   `docs/verification/2026-11-13-dotfiles-work-old.md`; work-new still to do.
   The vimrc (shared by vim, neovim and IdeaVim) belongs in the same review.
+- **vimrc reviewed (user, 2026-11-22),** installed by hand on work-new as
+  `~/.vim/vimrc` + empty `~/.vim/vimrc.local`. Kept: all settings (number,
+  scrolloff 10, 4-space expandtab, system clipboard, ignorecase/smartcase).
+  Superseded: `H`/`L` (line start/end), `ctrl+j/k` command history, `:qq`.
+  Not now, maybe later: `Enter`/`Space` clearing search highlight. Not yet
+  in the repo as files.
 
 ## IntelliJ
 
@@ -106,6 +112,10 @@ IdeaVIM plugin, `~/.ideavimrc` (the old one sourced a `~/.vim/vimrc` that was
 never set up), `ctrl+j/k` for up/down in lists. Deferred until IntelliJ is
 installed and the defaults prove annoying. Old script:
 `applications/intellij-community.sh`.
+
+Installed on work-new 2026-11-22 with IdeaVim. `~/.ideavimrc` (by hand, from
+the work-old snapshot): `source ~/.vim/vimrc`, plus `J`/`K` = next/previous
+editor tab (replaces join-lines and quick-doc).
 
 ## Bluesnooze / Cursorcerer replacements
 
