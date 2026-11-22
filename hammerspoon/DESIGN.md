@@ -177,6 +177,17 @@ judging what is on screen still need a person. There is deliberately
   $.IsSecureEventInputEnabled()'`; the PID in `ioreg -l -w 0 | grep
   kCGSSessionSecureInputPID` names the owner but can lag behind an app
   switch.
+- **To review (user, 2026-11-22): Citrix's own keyboard options.** Citrix
+  Workspace on work-new shows several keyboard settings, e.g. which
+  modifiers are sent to the remote machine. Hammerspoon stays deaf under
+  Citrix's secure input whatever they are, so the question is whether they
+  make a layer possible on the *remote* side (Citrix forwarding caps/fn as
+  something Windows can use), or make the `hidutil` idea above simpler.
+- **To review (user, 2026-11-22): `citrixfocus.lua` vs. Citrix's toolbar
+  option.** Work-new has a "use toolbar shortcut" option (possibly new: its
+  prefs carry the feature flag `hdx-50284-toolbar-revamp = 1`). If it
+  changes or removes the hidden toolbar notch, the mouse-move workaround in
+  `citrixfocus.lua` may be refinable or unnecessary.
 - **Does Hammerspoon need Input Monitoring** in addition to Accessibility for
   this tap? `docs/keymap.md` › Layer ownership currently claims Accessibility only — verify and correct if so.
 - **Layer 0 is not reproducible from the repo, and is now three GUI settings.**
