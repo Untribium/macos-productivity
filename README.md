@@ -75,6 +75,52 @@ overlay/scripts/build-app.sh --install  # build, copy to ~/Applications, launch
 
 `caps+Return` toggles it. See `overlay/README.md` for the checklist.
 
+### 6. Citrix desktop from Spotlight (optional)
+
+Typing "Citrix BJB" or "BJB Citrix Desktop" in Spotlight starts the BJB desktop
+(RPCA-UC3 - PRD). Set up on work-new 2026-11-06; nothing here is in the repo as
+code, so recreate it by hand. No admin needed; everything lives in
+`~/Applications`.
+
+1. **Add the desktop in Citrix Workspace.** Sign in to the store
+   (`citrixstore.juliusbaer.com`), open the desktop once, then use Citrix
+   Workspace's "Add to Dock"/"Add to Launchpad"-style option, or its Desktop
+   alias, so that an app named like `RPCA-UC3 - PRD 743.app` appears in
+   `~/Applications`. This is a Citrix "Citralias": a Citrix-made app whose
+   `Contents/Resources/Citralias.plist` names the store and the desktop
+   (`Citrix Server Unique Application Name` = `Cloud-CH150.RPCA-UC3 - PRD $P22062`).
+   The trailing number in the app name may differ per machine.
+2. **Read its bundle ID**, which Citrix derives from that name:
+
+   ```sh
+   mdls -name kMDItemCFBundleIdentifier -raw ~/Applications/RPCA-UC3*.app
+   ```
+
+   On work-old/work-new it was
+   `com.citrix.XenDesktopAlias-Cloud-CH150.RPCA-UC3-PRD$P22062`. If the output
+   differs, use the new one below.
+3. **Make the launcher**, a tiny AppleScript applet that opens it by bundle ID:
+
+   ```sh
+   osacompile -o ~/Applications/"BJB Citrix Desktop.app" -e \
+     'do shell script "open -b '"'"'com.citrix.XenDesktopAlias-Cloud-CH150.RPCA-UC3-PRD$P22062'"'"'"'
+   ```
+
+4. **Optional friendly name.** The Citralias is also reachable as "Citrix BJB":
+
+   ```sh
+   ln -s ~/Applications/RPCA-UC3*.app ~/Applications/"Citrix BJB.app"
+   ```
+
+5. **Verify:** wait a few seconds for Spotlight to index, or run
+   `open ~/Applications/"BJB Citrix Desktop.app"`; the Citrix Viewer session
+   opens. First launch may ask to allow the app to run shell scripts or
+   control other apps.
+
+Related: `hammerspoon/modules/citrixsignin.lua` types the sign-in email when
+Citrix's login window appears, and `citrixfocus.lua` fixes keyboard focus in the
+Viewer; both are live once Hammerspoon runs.
+
 ## Editing
 
 Add or change a binding = a two-file edit, one commit:
