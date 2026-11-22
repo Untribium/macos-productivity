@@ -89,8 +89,12 @@ code, so recreate it by hand. No admin needed; everything lives in
    `~/Applications`. This is a Citrix "Citralias": a Citrix-made app whose
    `Contents/Resources/Citralias.plist` names the store and the desktop
    (`Citrix Server Unique Application Name` = `Cloud-CH150.RPCA-UC3 - PRD $P22062`).
-   The trailing number in the app name may differ per machine. If Workspace
-   never creates it, see `docs/citrix-stub-by-hand.md` (untested).
+   The trailing number in the app name may differ per machine. **If Workspace
+   never creates it** (work-new: the store has subscriptions disabled and a
+   Citrix flag skips creating them), build the stub by hand per
+   `docs/citrix-stub-by-hand.md` (tested on work-new 2026-11-22) and skip
+   steps 2–4 here: that doc makes the launcher too, by path. Workspace deletes
+   any stub in `~/Applications` that it did not create itself.
 2. **Read its bundle ID**, which Citrix derives from that name:
 
    ```sh
@@ -119,8 +123,10 @@ code, so recreate it by hand. No admin needed; everything lives in
    control other apps.
 
 Related: `hammerspoon/modules/citrixsignin.lua` types the sign-in email when
-Citrix's login window appears, and `citrixfocus.lua` fixes keyboard focus in the
-Viewer; both are live once Hammerspoon runs.
+Citrix's login window appears (needs `citrixEmail` in the gitignored
+`hammerspoon/config/local.lua`), and `citrixfocus.lua` fixes keyboard focus in
+the Viewer; both are live once Hammerspoon runs. On work-new (Workspace 26.09)
+the focus bug no longer shows, and `citrixfocus` is switched off for testing.
 
 ## Editing
 
