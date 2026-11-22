@@ -20,6 +20,10 @@ runs them.
 - `bootstrap.sh` (Hammerspoon symlinks) and `install-layout.sh` (branch
   `machine-setup`) already follow this shape.
 - Open: where the per-machine answers live, so a re-run doesn't ask again.
+- Must write `hammerspoon/config/local.lua` (gitignored): ask for
+  machine-local values such as `citrixEmail`. A fresh clone has no such file
+  and `citrixsignin` then skips silently (log: "no citrixEmail in
+  config/local.lua"), as on work-new 2026-11-22.
 
 ## macOS defaults module
 
@@ -31,6 +35,17 @@ Preferences kept from the old scripts. Plain `defaults write`, no admin:
 | Hold repeats, no accent picker | `defaults write -g ApplePressAndHoldEnabled -bool false` | `keyboard/disable-character-picker.sh` |
 | Tap-to-click | `defaults -currentHost write com.apple.mouse.tapBehavior -int 1` | `keyboard/enable-tap-to-click.sh` |
 | Dock out of the way | `defaults write com.apple.dock autohide -bool true`, `autohide-delay -float 5`, then `killall Dock` | `ui/disable-dock.sh` |
+| No text substitutions (added 2026-11-22) | `defaults write -g` each of `NSAutomaticCapitalizationEnabled`, `NSAutomaticSpellingCorrectionEnabled`, `NSAutomaticPeriodSubstitutionEnabled`, `NSAutomaticQuoteSubstitutionEnabled`, `NSAutomaticDashSubstitutionEnabled` `-bool false`. Apps started afterwards; Microsoft Office has its own AutoCorrect | — |
+
+Tap-to-click needs all three entries, written on work-new 2026-11-22:
+`com.apple.AppleMultitouchTrackpad Clicking`,
+`com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking` (`-bool true`),
+and `-currentHost -g com.apple.mouse.tapBehavior -int 1`; logout.
+
+Animation speed-ups, untested, for if something bugs the user:
+`-g NSAutomaticWindowAnimationsEnabled false`, `-g NSWindowResizeTime 0.001`,
+`com.apple.dock launchanim false`, `mineffect scale`,
+`expose-animation-duration 0.1`, `com.apple.finder DisableAllAnimations true`.
 
 To probe before automating (README §3 is manual until then):
 
