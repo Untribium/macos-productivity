@@ -89,7 +89,8 @@ code, so recreate it by hand. No admin needed; everything lives in
    `~/Applications`. This is a Citrix "Citralias": a Citrix-made app whose
    `Contents/Resources/Citralias.plist` names the store and the desktop
    (`Citrix Server Unique Application Name` = `Cloud-CH150.RPCA-UC3 - PRD $P22062`).
-   The trailing number in the app name may differ per machine.
+   The trailing number in the app name may differ per machine. If Workspace
+   never creates it, see `docs/citrix-stub-by-hand.md` (untested).
 2. **Read its bundle ID**, which Citrix derives from that name:
 
    ```sh

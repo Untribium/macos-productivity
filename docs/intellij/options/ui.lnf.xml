@@ -1,0 +1,8 @@
+<application>
+  <component name="UISettings">
+    <option name="CLOSE_TAB_BUTTON_ON_THE_RIGHT" value="false" />
+    <option name="compactTreeIndents" value="true" />
+    <option name="SHOW_PREVIEW_IN_SEARCH_EVERYWHERE" value="true" />
+    <option name="showTreeIndentGuides" value="true" />
+  </component>
+</application>
