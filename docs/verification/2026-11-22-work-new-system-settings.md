@@ -71,9 +71,93 @@ Before → after, read back with `defaults read`:
 | `com.apple.symbolichotkeys` 60 (previous source) | enabled, `(32, 49, 262144)` ⌃Space | `enabled = 0; (65535, 65535, 0)` |
 | `com.apple.symbolichotkeys` 61 (next source) | enabled, `(32, 49, 786432)` ⌃⌥Space | `enabled = 1; (32, 49, 1966080)` hyper+Space |
 
-Symbolic hotkeys were applied without logout via
-`/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u`.
-Key repeat and tap-to-click take effect after logout.
+Key repeat and tap-to-click took effect after logout (tap-to-click needed it;
+key repeat already worked before).
+
+### Symbolic hotkeys: the values must be typed
+
+The first write used the old-style string form:
+
+```sh
+defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict-add 61 '{enabled = 1; value = {parameters = (32, 49, 1966080); type = standard;};}'
+```
+
+`defaults read` showed the expected values, but neither `activateSettings -u`
+nor a logout changed anything: Settings still listed ⌃Space and
+`caps+space` did nothing. `plutil -p` showed why — everything was stored as
+strings, unlike the entries macOS writes itself:
+
+```
+    "60" => {
+      "enabled" => "0"
+      "value" => {
+        "parameters" => [
+          0 => "65535"
+          1 => "65535"
+          2 => "0"
+        ]
+        "type" => "standard"
+      }
+    }
+    "61" => {
+      "enabled" => "1"
+      "value" => {
+        "parameters" => [
+          0 => "32"
+          1 => "49"
+          2 => "1966080"
+        ]
+        "type" => "standard"
+      }
+    }
+    ...
+    "164" => {
+      "enabled" => false
+      "value" => {
+        "parameters" => [
+          0 => 65535
+          1 => 65535
+          2 => 0
+        ]
+        "type" => "standard"
+      }
+    }
+```
+
+Rewritten with XML values, then reloaded:
+
+```sh
+defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict-add 61 '<dict><key>enabled</key><true/><key>value</key><dict><key>parameters</key><array><integer>32</integer><integer>49</integer><integer>1966080</integer></array><key>type</key><string>standard</string></dict></dict>'
+defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict-add 60 '<dict><key>enabled</key><false/><key>value</key><dict><key>parameters</key><array><integer>65535</integer><integer>65535</integer><integer>0</integer></array><key>type</key><string>standard</string></dict></dict>'
+/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u
+```
+
+```
+    "60" => {
+      "enabled" => false
+      "value" => {
+        "parameters" => [
+          0 => 65535
+          1 => 65535
+          2 => 0
+        ]
+        "type" => "standard"
+      }
+    }
+    "61" => {
+      "enabled" => true
+      "value" => {
+        "parameters" => [
+          0 => 32
+          1 => 49
+          2 => 1966080
+        ]
+        "type" => "standard"
+      }
+    }
+```
+
+`caps+space` switched layouts in Notes straight away, no logout.
 
 ## 3. Reduce Motion cannot be written
 
@@ -122,7 +206,9 @@ No other terminal app appears in `/Library/Managed Preferences/`.
 
 - README §3 steps 1 and 2 are scriptable in principle: the values are known.
   Whether a `defaults` write alone takes effect is still open.
-- README §3 step 3 is scriptable and verified: `defaults` + `activateSettings -u`.
+- README §3 step 3 is scriptable and verified: `defaults` with **typed XML
+  values** + `activateSettings -u`, no logout. The `{enabled = 1; …}` string
+  form is silently ignored.
 - On work-new, **Intune forces Secure Keyboard Entry in Terminal.app**, so no
   event tap sees keys while Terminal is frontmost: no fn layer, no window
   cycling there. Not fixable from the user side; use another terminal (if one

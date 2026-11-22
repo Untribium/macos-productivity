@@ -48,7 +48,9 @@ To probe before automating (README §3 is manual until then):
   `defaults` write alone.
 - **Input Sources shortcuts (README step 3).** Verified 2026-11-22: row 61 =
   `(32, 49, 1966080)` enabled, row 60 = `(65535, 65535, 0)` disabled, then
-  `activateSettings -u`; no logout.
+  `activateSettings -u`; no logout. **Write the values as typed XML**
+  (`<true/>`, `<integer>`): the `{enabled = 1; …}` form stores strings,
+  which macOS silently ignores.
 - **Reduce Motion: cannot be scripted.** `com.apple.universalaccess` refuses
   writes. The module can check it and open Accessibility → Display.
 
