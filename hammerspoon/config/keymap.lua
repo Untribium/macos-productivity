@@ -56,7 +56,9 @@ return {
   -- Not a binding: Citrix Viewer workaround (modules/citrixfocus.lua). On
   -- activation, a mouse move clears keyboard focus from the hidden toolbar
   -- notch. restoreCursor = false if focus returns to the notch.
-  citrixfocus = { enabled = true, appName = "Citrix Viewer", delay = 0.15, restoreCursor = true, restoreDelay = 0.05 },
+  -- Off since 2026-11-22: the bug no longer shows with Workspace 26.09
+  -- (work-new). Set enabled = true if it comes back.
+  citrixfocus = { enabled = false, appName = "Citrix Viewer", delay = 0.15, restoreCursor = true, restoreDelay = 0.05 },
 
   -- Not a binding: types the email from config/local.lua (citrixEmail) and
   -- presses Return when the sign-in window gains focus, once per window

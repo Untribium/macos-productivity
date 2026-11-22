@@ -187,7 +187,11 @@ judging what is on screen still need a person. There is deliberately
   option.** Work-new has a "use toolbar shortcut" option (possibly new: its
   prefs carry the feature flag `hdx-50284-toolbar-revamp = 1`). If it
   changes or removes the hidden toolbar notch, the mouse-move workaround in
-  `citrixfocus.lua` may be refinable or unnecessary.
+  `citrixfocus.lua` may be refinable or unnecessary. **Tested same day:** the
+  option does not hide the toolbar, but the focus bug no longer shows with
+  Hammerspoon off (Workspace 26.09), so Citrix probably fixed it.
+  `citrixfocus` is disabled in `keymap.lua`; remove the module if it stays
+  unneeded.
 - **Does Hammerspoon need Input Monitoring** in addition to Accessibility for
   this tap? `docs/keymap.md` › Layer ownership currently claims Accessibility only — verify and correct if so.
 - **Layer 0 is not reproducible from the repo, and is now three GUI settings.**
