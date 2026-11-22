@@ -166,7 +166,17 @@ judging what is on screen still need a person. There is deliberately
   config is deaf while Terminal is frontmost — no fn layer, no window
   cycling. Not fixable from here: use another terminal app or an IDE's
   terminal (`docs/verification/2026-11-22-work-new-system-settings.md`).
-  Check with `ioreg -l -w 0 | grep kCGSSessionSecureInputPID`.
+  **Citrix Viewer turns secure input on itself** while a session is
+  frontmost (not managed; same on work-old), so the config is deaf in Citrix
+  too: macOS acts on 🌐+key, caps-tap does nothing. No known switch.
+  Idea, not planned: an app watcher (no key events needed) swaps caps to
+  another key via `hidutil` while Citrix is active, and a script inside
+  Windows builds the nav layer from it
+  (`docs/verification/2026-11-22-citrix-secure-input.md`).
+  Check with `osascript -l JavaScript -e 'ObjC.import("Carbon");
+  $.IsSecureEventInputEnabled()'`; the PID in `ioreg -l -w 0 | grep
+  kCGSSessionSecureInputPID` names the owner but can lag behind an app
+  switch.
 - **Does Hammerspoon need Input Monitoring** in addition to Accessibility for
   this tap? `docs/keymap.md` › Layer ownership currently claims Accessibility only — verify and correct if so.
 - **Layer 0 is not reproducible from the repo, and is now three GUI settings.**
