@@ -102,7 +102,10 @@ or none). Note for `docs/keymap.md`: the old config binds
 - **vimrc reviewed (user, 2026-11-22),** installed by hand on work-new as
   `~/.vim/vimrc` + empty `~/.vim/vimrc.local`. Kept: all settings (number,
   scrolloff 10, 4-space expandtab, system clipboard, ignorecase/smartcase).
-  Superseded: `H`/`L` (line start/end), `ctrl+j/k` command history, `:qq`.
+  Superseded: `ctrl+j/k` command history, `:qq`. `H`/`L` (line start/end) was
+  first marked superseded, then kept (user, 2026-11-23, muscle memory): they
+  are mapped to `^`/`$` in `~/.vim/vimrc`, so IdeaVim gets them via its
+  `source`.
   Not now, maybe later: `Enter`/`Space` clearing search highlight. Not yet
   in the repo as files.
 
@@ -116,6 +119,10 @@ installed and the defaults prove annoying. Old script:
 Installed on work-new 2026-11-22 with IdeaVim. `~/.ideavimrc` (by hand, from
 the work-old snapshot): `source ~/.vim/vimrc`, plus `J`/`K` = next/previous
 editor tab (replaces join-lines and quick-doc).
+
+Wanted: smooth caret blinking and smooth caret movement both off (Settings ›
+Editor › General › Appearance: "Use smooth caret blinking" / "Smooth caret
+movement"; names as recalled, check the UI). Not yet applied on any machine.
 
 ## Bluesnooze / Cursorcerer replacements
 
