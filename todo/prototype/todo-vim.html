@@ -1,0 +1,1810 @@
+<title>Open Points Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* A fake desktop ("stage") holding the overlay, with a rail of switches (the
+   open questions) and a key reference beside it. */
+:root {
+  --bg: #e9ecf1;          /* page */
+  --stage: #c9d0db;       /* desktop behind the overlay */
+  --stage-ink: #9aa4b4;   /* fake editor text on the desktop */
+  --glass: rgba(246, 248, 251, 0.82);
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --glass-clear: rgba(246, 248, 251, 0.22);  /* like NSGlassEffectView .clear */
+  --fg: #1d222b;
+  --muted: #6a7383;
+  --faint: #a3abb8;
+  --line: rgba(29, 34, 43, 0.10);
+  --focus: rgba(58, 104, 220, 0.13);
+  --focus-edge: rgba(58, 104, 220, 0.55);
+  --accent: #3a68dc;
+  --accent-ink: #ffffff;
+  --done: #2f8a5b;
+  --drop: #b0533f;
+  --chip: rgba(29, 34, 43, 0.06);
+  --ctx: rgba(29, 34, 43, 0.035); --ctx-edge: rgba(29, 34, 43, 0.20);
+  --rail: #f5f6f9;
+  --shadow: 0 30px 80px rgba(20, 28, 45, 0.28), 0 2px 6px rgba(20, 28, 45, 0.12);
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Instrument Sans", system-ui, sans-serif;
+  --ui: "Instrument Sans", -apple-system, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --stage: #1b1f27; --stage-ink: #353c4a;
+  --glass: rgba(38, 42, 51, 0.84); --glass-edge: rgba(255, 255, 255, 0.08); --glass-clear: rgba(38, 42, 51, 0.24);
+  --fg: #e6e9ef; --muted: #9099aa; --faint: #5d6576; --line: rgba(230, 233, 239, 0.09);
+  --focus: rgba(110, 150, 255, 0.16); --focus-edge: rgba(120, 160, 255, 0.6);
+  --accent: #6e96ff; --accent-ink: #0d1220;
+  --done: #59c08a; --drop: #e07d66; --chip: rgba(230, 233, 239, 0.08); --rail: #171a21; --ctx: rgba(230, 233, 239, 0.04); --ctx-edge: rgba(230, 233, 239, 0.18);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #12151b; --stage: #1b1f27; --stage-ink: #353c4a;
+  --glass: rgba(38, 42, 51, 0.84); --glass-edge: rgba(255, 255, 255, 0.08); --glass-clear: rgba(38, 42, 51, 0.24);
+  --fg: #e6e9ef; --muted: #9099aa; --faint: #5d6576; --line: rgba(230, 233, 239, 0.09);
+  --focus: rgba(110, 150, 255, 0.16); --focus-edge: rgba(120, 160, 255, 0.6);
+  --accent: #6e96ff; --accent-ink: #0d1220;
+  --done: #59c08a; --drop: #e07d66; --chip: rgba(230, 233, 239, 0.08); --rail: #171a21; --ctx: rgba(230, 233, 239, 0.04); --ctx-edge: rgba(230, 233, 239, 0.18);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+}
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; max-width: 1680px; margin: 0 auto; align-items: start; }
+@media (max-width: 900px) { .app { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- stage (fake desktop) */
+.stage {
+  position: relative; min-width: 0; height: clamp(560px, calc(100vh - 32px), 860px); border-radius: 14px; overflow: hidden;
+  background: var(--stage);
+}
+.desk {
+  position: absolute; inset: 0; padding: 28px 32px; font: 13px/1.65 var(--mono); color: var(--stage-ink);
+  white-space: pre; overflow: hidden; user-select: none;
+}
+.desk b { color: var(--accent); opacity: .55; font-weight: 500; }
+.closed-hint {
+  position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%);
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: calc(100% - 32px);
+}
+.hintchip, .glass {
+  background: var(--glass); border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4);
+}
+.hintchip { font: 500 12px var(--mono); color: var(--fg); padding: 7px 11px; border-radius: 999px; box-shadow: 0 4px 14px rgba(0,0,0,.12); cursor: pointer; }
+.toast {
+  position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 6;
+  font: 500 12px var(--mono); background: var(--accent); color: var(--accent-ink);
+  padding: 7px 12px; border-radius: 999px; max-width: calc(100% - 32px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- the single panel: quick capture and the item view */
+.panel {
+  position: absolute; left: 50%; top: 9%; transform: translateX(-50%); width: min(640px, calc(100% - 32px));
+  border-radius: 22px; box-shadow: var(--shadow); font-family: var(--sans); display: flex; flex-direction: column;
+}
+.top { padding: 14px 18px 12px; display: flex; align-items: center; gap: 10px; min-height: 52px; }
+.panel .top + * { border-top: 1px solid var(--line); }
+.top .title { font-weight: 600; font-size: 15px; }
+.top .sub { color: var(--muted); font-size: 13px; margin-left: auto; font-family: var(--mono); }
+.top input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--fg); font: 400 20px var(--sans); padding: 2px 0; }
+.top .prompt { font: 600 18px var(--mono); color: var(--accent); }
+
+/* ---------- rows and task blocks */
+.row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; }
+.row.focus { background: var(--focus); border-color: var(--focus-edge); }
+.mark { font: 15px/20px var(--mono); color: var(--faint); text-align: center; }
+.row.done .mark { color: var(--done); }
+.ttl { font-size: 14.5px; line-height: 20px; overflow-wrap: anywhere; min-width: 0; }
+.row.done .ttl { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--faint); }
+.ttl input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--fg); font: inherit; padding: 0; }
+.ttl input::placeholder { color: var(--faint); }
+.meta { display: flex; gap: 6px; align-items: center; font: 12px/20px var(--mono); color: var(--muted); white-space: nowrap; }
+.due.over { color: var(--drop); }
+.due.later { color: var(--faint); }
+.prog { font: 11.5px var(--mono); color: var(--muted); }
+.spent { font: 11.5px var(--mono); color: var(--done); }
+.jira { font: 500 11.5px var(--mono); background: var(--chip); padding: 1px 5px; border-radius: 5px; color: var(--accent); }
+.empty { color: var(--muted); padding: 14px 12px; text-align: center; font-size: 13.5px; }
+.row.sub { margin-left: 18px; }
+/* grouped tasks inside a card: the highlight spans the card's full width, square
+   (the indent moves into the padding), rounded only where it meets the card's
+   bottom edge */
+.block .row.sub { margin-left: 0; padding-left: 26px; border-radius: 0; border-left-color: transparent !important; border-right-color: transparent !important; }
+.block .row.sub:last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; border-bottom-color: transparent !important; }
+.block.grp { padding-bottom: 0 !important; }
+.row.sub .ttl { font-size: 13.5px; }
+/* a group's heading: a label for its tasks, no checkbox */
+/* lifted: no glyph column at all; done shows as struck through */
+.mk-lift .row { grid-template-columns: minmax(0, 1fr) auto; }
+.mk-lift .row.more { grid-template-columns: minmax(0, 1fr); }
+.mk-lift .row .mark { display: none; }
+.row.head .mark { color: var(--muted); font-size: 12px; }
+.mk-dot .row.head.marked .mark { color: var(--accent); }
+/* Space: marked tasks, as a dot (the ● takes the place of the ○) or lifted */
+.mk-dot .row.marked { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.mk-dot .row.marked .mark { color: var(--accent); }
+/* subtasks from other days, opened in place with Return on the "+N" line */
+.row.other { opacity: .6; }
+.row.other.focus { opacity: 1; }
+/* the "+N" line: small and quiet, focusable */
+.row.more { padding: 0 8px 3px; min-height: 0; grid-template-columns: 18px minmax(0, 1fr); font: 11.5px/18px var(--mono); color: var(--faint); }
+.row.more .mark { font: 11px/18px var(--mono); }
+.row.more.focus { color: var(--fg); }
+/* a main task and its subtasks form one block */
+.block { border: 1px solid transparent; border-radius: 12px; margin: 2px 0; }
+.block.focus { background: var(--focus); border-color: var(--focus-edge); }
+.block.focus .row.focus { background: none; border-color: transparent; }
+.block.ctx { background: var(--ctx); border-color: var(--ctx-edge); }
+/* lifted: a marked main task raises its whole block, a marked subtask its row */
+.mk-lift .pane .block.marked, .mk-lift .pane .row.sub.marked {
+  background: color-mix(in srgb, var(--accent) 6%, var(--glass)); border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 10px 24px rgba(20, 28, 45, 0.24);
+  scale: 1.025; position: relative; z-index: 2;
+}
+.mk-lift .pane .row.sub.marked { box-shadow: 0 6px 14px rgba(20, 28, 45, 0.20); }
+/* inside a lifted group card its marked tasks don't lift a second time */
+.mk-lift .pane .block.marked .row.sub.marked { scale: none; box-shadow: none; background: none; border-color: transparent; }
+.board.cards.mk-lift .pane:not(.cur) .block.marked, .board.cards.mk-lift .pane:not(.cur) .row.sub.marked {
+  background: color-mix(in srgb, var(--accent) 6%, var(--glass)); box-shadow: 0 10px 24px rgba(20, 28, 45, 0.24);
+  backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.mk-lift .pane .block.marked.focus, .mk-lift .pane .row.sub.marked.focus { background: color-mix(in srgb, var(--accent) 16%, var(--glass)); }
+.mk-lift .pane .block.marked .row.focus { background: none; border-color: transparent; }
+
+/* ---------- the board: three slots (previous column, focused column, later
+   ones), each column its own window. place() slides every column vertically so
+   the focused row sits on one fixed line. */
+.board {
+  position: absolute; left: 16px; right: 16px; top: 0; bottom: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start;
+  font-family: var(--sans); overflow-x: visible; overflow-y: clip;   /* rows never run under the bars */
+}
+.slot { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pane {
+  position: relative; display: flex; flex-direction: column; min-width: 0; border-radius: 18px; box-shadow: var(--shadow);
+  background: var(--glass); border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4);
+}
+.pane.cur { z-index: 1; }
+.panebody { padding: 2px 6px 8px; }
+.colhead { font: 600 11px var(--ui); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 10px 10px 6px; display: flex; gap: 6px; align-items: center; }
+.colhead .n, .group .n { margin-left: auto; font: 500 11px var(--mono); letter-spacing: 0; color: var(--faint); }
+.group { font: 600 10.5px var(--ui); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 10px 8px 4px; display: flex; gap: 8px; }
+.gempty { font: 12px var(--mono); color: var(--faint); padding: 2px 10px 6px; }
+/* the columns you are not in: clear glass, faded */
+.pane:not(.cur) {
+  background: var(--glass-clear); border-color: color-mix(in srgb, var(--glass-edge) 50%, transparent);
+  box-shadow: 0 10px 30px rgba(20, 28, 45, 0.12);
+  backdrop-filter: blur(4px) saturate(1.2); -webkit-backdrop-filter: blur(4px) saturate(1.2);
+}
+/* fading is per block, so a lit group (and lifted marks) can keep full strength */
+.pane:not(.cur) > .colhead, .pane:not(.cur) > .panebody > * { opacity: .5; }
+/* each task its own pane: no window behind a column, each block is a glass card */
+.board.cards .pane { background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.board.cards .panebody { padding: 2px 2px 8px; }
+.board.cards .block {
+  background: var(--glass); border-color: var(--glass-edge); margin: 0 0 8px; border-radius: 14px; padding: 2px 0;
+  box-shadow: 0 6px 18px rgba(20, 28, 45, 0.14);
+  backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.board.cards .block.focus { background: color-mix(in srgb, var(--accent) 14%, var(--glass)); border-color: var(--focus-edge); }
+.board.cards .block.ctx { border-color: var(--ctx-edge); }
+.board.cards .pane:not(.cur) .block { background: var(--glass-clear); box-shadow: none; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.board.cards .pane:not(.cur) > .panebody > * { opacity: .65; }
+.board .pane:not(.cur) > .panebody > .kin,
+.board.mk-lift .pane:not(.cur) > .panebody > .marked, .board.mk-lift .pane:not(.cur) > .panebody > :has(.marked) { opacity: 1; }
+/* the focused group, where else it shows: a faint accent outline and tint; no lift */
+.block.kin:not(.marked) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.board.cards .block.kin:not(.marked) { background: color-mix(in srgb, var(--accent) 7%, var(--glass)); }
+.board.cards .pane:not(.cur) .block.kin:not(.marked) { background: color-mix(in srgb, var(--accent) 8%, var(--glass-clear)); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.board.cards .colhead, .board.cards .group { color: var(--fg); }
+.board.cards .group { padding: 8px 6px 6px; }
+.void { visibility: hidden; }
+/* the bars: filter on top (only when filtering), details and status at the bottom */
+.cbar { position: absolute; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); z-index: 2; border-radius: 16px; box-shadow: var(--shadow); }
+.ctop { top: 16px; }
+.cstatus { bottom: 16px; }
+.dots { font: 500 11px var(--mono); color: var(--faint); white-space: nowrap; }
+.dots b { color: var(--accent); }
+@media (max-width: 700px) { .board { grid-template-columns: minmax(0, 1fr); } .board > :not(.mid) { display: none; } }
+
+/* the detail strip: fixed height, so nothing in the list changes size */
+.dstrip { height: 32px; display: flex; gap: 14px; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.dstrip .dn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font: 12.5px var(--sans); }
+.dstrip .none { color: var(--faint); }
+.dstrip .dl { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+.dstrip .dl b { font-weight: 600; color: var(--accent); margin-left: 6px; }
+.dstrip .ds { flex: none; color: var(--done); }
+.dstrip .da { flex: none; color: var(--accent); opacity: .8; }
+#inp::placeholder { color: var(--faint); }
+/* a clipboard link is attached: a pill at the start of the field (Backspace on
+   an empty field or its × drops it) */
+.pill { flex: none; display: inline-flex; align-items: center; gap: 5px; align-self: center; white-space: nowrap;
+  font: 500 11.5px/1 var(--mono); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 999px; padding: 4px 6px 4px 9px; }
+.pill .px { font-weight: 500; color: var(--muted); cursor: pointer; padding: 0 2px; border-radius: 999px; }
+.pill .px:hover { color: var(--fg); }
+/* Tab's date pill on a row: where it will go; the timer's bar drains inside it */
+.pill.date { position: relative; overflow: hidden; padding: 3px 8px; font-size: 11px; }
+.pill.date .pbar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); transform-origin: left; animation: pdrain 1000ms linear forwards; }
+@keyframes pdrain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.row.pending { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
+.block:has(> .row.head.pending) { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+/* inside a menu row the pill is smaller, to sit with the 13.5px field text */
+.menu .pill { font-size: 10.5px; padding: 2px 4px 2px 7px; gap: 3px; }
+
+/* x / s on several tasks: the one being asked about */
+.pane .row.asking, .block.focus .row.asking { background: color-mix(in srgb, var(--accent) 22%, var(--glass)); border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+
+/* menus: inline in the list (below the focused task, the card's full width,
+   pushing the rows below down); a popover in the item view */
+.menu { border-radius: 14px; padding: 6px; font-family: var(--sans); }
+.panel .menu { position: absolute; right: 18px; top: 64px; width: 230px; z-index: 3; box-shadow: var(--shadow); }
+/* inline: the card grows a section, under a divider: no box of its own */
+.menu.inline { margin: 2px 0 0; padding: 2px 0 4px; border-top: 1px solid var(--line); border-radius: 0; background: none; }
+.menu.inline .mh { font: 500 10.5px var(--ui); letter-spacing: .06em; color: var(--faint); padding: 6px 8px 2px; }
+.menu.inline .mi { padding: 4px 8px; font-size: 13.5px; border-radius: 6px; }
+.menu.inline .mi.on { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--fg); }
+.menu.inline .mi.on span { color: var(--muted); opacity: 1; }
+.menu.inline .mi.on kbd { color: var(--accent); opacity: 1; }
+.menu .mi.none { color: var(--faint); font-size: 13px; }
+.menu .mi.addopt { color: var(--muted); font-size: 13px; }
+.menu .mi.addopt.on { color: var(--fg); }
+.menu .mi.add { align-items: center; justify-content: flex-start; gap: 8px; }
+.menu .mi.add input, .menu .mi.add .fnormal { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--fg); font: 13.5px var(--sans); padding: 0; }
+.menu .mhint { font: 11px var(--mono); color: var(--faint); padding: 4px 8px 2px; }
+/* the sheet: one row per section, options side by side */
+.menu.sheet { padding-bottom: 6px; }
+.menu.sheet .srow { display: flex; align-items: baseline; gap: 10px; padding: 4px 8px; border-radius: 6px; }
+.menu.sheet .srow.on { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.menu.sheet .sl { flex: none; width: 46px; font: 500 10.5px var(--ui); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.menu.sheet .srow.on .sl { color: var(--accent); }
+.menu.sheet .sopts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 4px; min-width: 0; flex: 1; }
+.menu.sheet .so { font: 12.5px var(--sans); padding: 2px 7px; border-radius: 6px; color: var(--muted); white-space: nowrap; }
+.menu.sheet .so.cur { color: var(--fg); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.menu.sheet .so.val { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--fg); }
+.menu.sheet .srow.on .so.sel { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--fg); }
+.menu.sheet .so.add { color: var(--faint); }
+.menu.sheet .so.none { color: var(--faint); padding-left: 0; }
+.menu.sheet .so kbd { font: 600 10.5px var(--mono); color: var(--accent); margin-left: 5px; }
+.menu.sheet .mi.add { display: inline-flex; flex: 1; min-width: 160px; padding: 0 4px; }
+.menu .mh { font: 600 11px var(--ui); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 4px; }
+.menu .mi { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 8px; font-size: 14px; }
+.menu .mi span { font: 12px var(--mono); color: var(--muted); }
+.menu .mi kbd { font: 600 12px var(--mono); color: var(--accent); margin-left: 6px; }
+.menu .mi.on { background: var(--accent); color: var(--accent-ink); }
+.menu .mi.on span, .menu .mi.on kbd { color: var(--accent-ink); opacity: .85; }
+
+/* item view */
+
+/* status line */
+.status { display: flex; gap: 10px; align-items: center; padding: 8px 14px; font: 12px var(--mono); color: var(--muted); min-height: 36px; }
+.panel .status { border-top: 1px solid var(--line); }
+.mode { font-weight: 600; letter-spacing: .04em; padding: 2px 7px; border-radius: 5px; background: var(--chip); color: var(--fg); }
+.mode.insert { background: var(--done); color: var(--accent-ink); }
+.mode.menu, .mode.filter { background: var(--accent); color: var(--accent-ink); }
+.mode.field { background: #b07a1f; color: #fff; }
+/* field normal mode: the selected character is the block caret */
+.fnormal { display: inline; white-space: pre-wrap; }
+.top .fnormal { flex: 1; font: 400 20px var(--sans); }
+.fnormal .bc { background: var(--accent); color: var(--accent-ink); font-weight: inherit; border-radius: 2px; }
+.pend { color: var(--accent); font-weight: 600; }
+.msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count { white-space: nowrap; }
+
+.scrim {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 5;
+  background: color-mix(in srgb, var(--stage) 55%, transparent); cursor: pointer;
+}
+.scrim div { font: 500 13px var(--mono); background: var(--glass); border: 1px solid var(--glass-edge); padding: 10px 16px; border-radius: 999px; color: var(--fg); }
+
+/* ---------- rail */
+.rail { min-width: 0; display: grid; gap: 12px; align-content: start; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+@media (max-width: 900px) { .rail { position: static; max-height: none; } }
+.card { background: var(--rail); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.card h2 { font: 600 12px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.card.railmode h2::after { content: " · keyboard"; color: var(--accent); }
+.q { display: grid; gap: 6px; border-radius: 10px; padding: 8px; margin: 0 -8px; }
+.q + .q { margin-top: 1px; }
+.q + .q::before { content: ""; display: block; height: 1px; background: var(--line); margin: -9px 0 6px; }
+.q.kfocus { box-shadow: inset 0 0 0 2px var(--focus-edge); background: var(--focus); }
+.q .ql { font-size: 13px; font-weight: 600; }
+.opts { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.opts label { font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; user-select: none; }
+.opts input { position: absolute; opacity: 0; pointer-events: none; }
+.opts label:has(input:checked) { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.opts label:has(input:focus-visible) { outline: 2px solid var(--focus-edge); outline-offset: 2px; }
+.note { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+.keycard summary { cursor: pointer; list-style: none; }
+.keycard summary::-webkit-details-marker { display: none; }
+.keycard summary h2 { display: inline; margin: 0; }
+.keycard summary h2::after { content: " ▸"; }
+.keycard[open] summary h2::after { content: " ▾"; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12.5px; margin-top: 10px; }
+.keys kbd { font: 500 11.5px var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; justify-self: start; white-space: nowrap; }
+.keys .sec { grid-column: 1 / -1; font: 600 11px var(--ui); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+button.reset { font: 500 12px var(--ui); border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 6px 10px; cursor: pointer; margin-top: 10px; }
+button.reset:focus-visible { outline: 2px solid var(--focus-edge); }
+</style>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <div class="desk" id="desk"></div>
+    <div id="panelHost"></div>
+    <div id="scrim" class="scrim" hidden><div>Click here, then use the keyboard</div></div>
+  </div>
+  <aside class="rail">
+    <div class="card">
+      <h2>Open questions</h2>
+      <div id="qs"></div>
+      <p class="note"><b>,</b> moves the keyboard here (back to the question you were on): <b>j k</b> pick a question, <b>h l</b> change it, <b>Esc</b> or <b>,</b> back.</p>
+      <p class="note" id="rmnote" hidden>macOS Reduce Motion is on. This prototype ignores it so you can judge the motion; the Motion switch sets it.</p>
+      <p class="note">Sample data, relative to today. While the overlay is closed, <b>Return</b> stands in for caps+Return and <b>c</b> for quick capture. In capture, <b>Return</b> saves and closes, <b>⌃Return</b> (caps+Return) saves and opens the list. <b>Clipboard (fake)</b> stands in for a copied link: capture offers it once as a pill at the start of the field, with the task it would make as the placeholder. Return on an empty field makes that task, typed text gets the link attached, <b>Backspace</b> on the empty field (or the pill's ×) drops it. "URL (unreadable)" is macOS only telling us there is a link. Tasks have no detail view: <b>f</b> or <b>Return</b> manages links (+ add or o adds, x removes). <b>Done</b> shows a group as soon as one of its tasks is done, with a "→ N open" line for the rest.</p>
+      <p class="note"><b>Groups:</b> <b>o</b> on a task makes it a group of two (empty again: back to a plain task); <b>O</b> adds a task of its own. A heading stands for its tasks here. <b>Text fields:</b> Esc on an empty field leaves at once. With text, Esc once for normal mode in the field (<b>h l</b>, <b>i a</b>), Esc again saves and leaves.</p>
+      <p class="note"><b>Space</b> marks tasks; actions then apply to the marks. <b>&gt;&gt;</b>, <b>Tab</b>, <b>t</b>+letter and <b>==</b> send tasks and you stay put (marks stay, so Tab Tab Tab keeps pushing). <b>H J K L</b> move them and you go along. <b>Tab in the list</b> (date pill): without marks, Tab shows where the task will go ("→ tomorrow") and it stays put; Tab Tab steps on, ⇧Tab back, the next key sends it (or, with the timer, 1 s after the last Tab), Esc cancels. With marks Tab sends at once. <b>f</b> opens a link: a menu below the task, Return or the link's letter (also <b>gx</b>).</p>
+      <p class="note"><b>Menus: One sheet</b> puts due, time and links in one sheet below the task, a row each: <b>Return</b> opens all three (Links first), <b>t s f</b> only their own row (<b>s f</b> again: close; <b>j k</b> grow it to all three), <b>j k</b> pick the row, <b>h l</b> change the value directly. Every key means one thing in the whole sheet: <b>t m w n -</b> the date, <b>0–6</b> the time, <b>o x</b> add / remove a link, from any row. <b>Esc</b> or <b>Return</b> close and keep it (one <b>u</b> undoes the session; a new date sends the task on close). On Links, <b>Return</b> opens. <b>x</b> is a confirm: <b>Return</b> marks done, <b>Esc</b> cancels. <b>x</b> or <b>s</b> on several tasks (marks, a heading) asks one task at a time: <b>Return</b> each, <b>⇧Return</b> all the rest, <b>Esc</b> stops.</p>
+      <button class="reset" id="reset" type="button">Reset sample data</button>
+    </div>
+    <details class="card keycard">
+      <summary><h2>Keys</h2></summary>
+      <div class="keys" id="keys"></div>
+    </details>
+  </aside>
+</div>
+
+<script>
+// ---------- dates
+const pad = n => String(n).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseIso = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const T0 = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
+const TODAY = iso(T0), TOMORROW = iso(addDays(T0, 1));
+const DOW = T0.getDay(); // 0 Sun .. 6 Sat
+const EOW = iso(addDays(T0, (5 - DOW + 7) % 7));         // Friday; on a Friday: today (open question)
+const SUNDAY = iso(addDays(T0, (7 - DOW) % 7));
+const NEXT_MON = iso(addDays(T0, ((1 - DOW + 7) % 7) || 7));
+// the first day after this week that isn't tomorrow: where "Later" puts things
+const LATER = (() => { const d = iso(addDays(parseIso(SUNDAY), 1)); return d > TOMORROW ? d : iso(addDays(parseIso(SUNDAY), 8)); })();
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const daysBetween = (a, b) => Math.round((parseIso(b) - parseIso(a)) / 864e5);
+
+function bucket(due) {
+  if (!due) return "none";
+  if (due < TODAY) return "overdue";
+  if (due === TODAY) return "today";
+  if (due === TOMORROW) return "tomorrow";
+  if (due <= SUNDAY) return "week";
+  return "later";
+}
+// a day this week after tomorrow (Friday if possible); undefined when none is left
+function weekDay() { for (const d of [EOW, iso(addDays(T0, 2))]) if (bucket(d) === "week") return d; return undefined; }
+function dueLabel(due) {
+  if (!due) return "";
+  const n = daysBetween(TODAY, due);
+  if (n < 0) return `${-n}d overdue`;
+  if (n === 0) return "today";
+  if (n === 1) return "tomorrow";
+  const d = parseIso(due);
+  if (n < 7) return WD[d.getDay()];
+  return `${WD[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+}
+const spentLabel = m => m == null ? "" : m < 60 ? `${m}m` : m % 60 ? `${Math.floor(m / 60)}h${pad(m % 60)}` : `${m / 60}h`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+// ---------- data
+let seq = 0;
+const item = (title, due, extra = {}) => ({ id: "t" + (++seq), title, due, parent: null, status: "open", doneAt: null, spent: null, links: [], ...extra });
+// A group is only a heading: its tasks have the dates, the done state and the time.
+const group = title => item(title, null, { group: true });
+function sample() {
+  seq = 0;
+  const weekLater = (() => { for (let n = 2; n < 7; n++) { const d = iso(addDays(T0, n)); if (d <= SUNDAY) return d; } return NEXT_MON; })();
+  const yday = iso(addDays(T0, -1)), demoDay = EOW > TOMORROW ? EOW : iso(addDays(T0, 2));
+  const L = [
+    item("Ask Marco about the test environment downtime", yday, { links: ["webex: #team-platform thread"] }),
+    item("Reply to Anna re. VPN access request", TODAY),
+    item("Review PR for ABC-412 login refactor", TODAY, { links: ["https://jira.example.com/browse/ABC-412", "https://gitlab.example.com/web/app/-/merge_requests/412"] }),
+    item("Update sprint board after daily", TODAY, { status: "done", doneAt: TODAY, spent: 15 }),
+    item("Check ABC-398 regression with QA", TOMORROW),
+    group("Demo for the review"),
+    item("Agree on the test plan with QA", weekLater),
+    item("Write design notes for the export feature", NEXT_MON),
+    group("Book travel for the Stockholm workshop"),
+    item("Expense report October", null),
+    item("Read the architecture RFC from the platform team", null, { links: ["confluence: RFC-27 event bus"] }),
+    item("Close out ABC-377 export timeout", iso(addDays(T0, -2)), { status: "done", doneAt: yday, spent: 90 }),
+    group("Onboarding for Jonas"),
+  ];
+  const find = w => L.find(t => t.title.startsWith(w)), demo = find("Demo"), travel = find("Book travel"), jonas = find("Onboarding");
+  L.push(
+    item("Collect screenshots of the export flow", TODAY, { parent: demo.id, status: "done", doneAt: TODAY, spent: 30 }),
+    item("Ask Lea for a slot", TODAY, { parent: demo.id }),
+    item("Prepare demo notes", demoDay, { parent: demo.id }),
+    item("Dry run with Lea", demoDay, { parent: demo.id }),
+    item("Flights, before prices go up", TODAY, { parent: travel.id }),
+    item("Hotel near the venue", TOMORROW, { parent: travel.id }),
+    item("Register on the workshop page", TODAY, { parent: travel.id, status: "done", doneAt: TODAY, spent: 10 }),
+    item("Request a laptop for Jonas", yday, { parent: jonas.id, status: "done", doneAt: yday, spent: 15 }),
+    item("Walk Jonas through the codebase", yday, { parent: jonas.id, status: "done", doneAt: yday, spent: 60 }),
+  );
+  return L;
+}
+
+// ---------- state
+const S = {
+  items: sample(),
+  view: "closed",      // closed | list | capture
+  mode: "normal",      // normal | insert | menu | filter
+  focus: "t2", fg: null, col: 1,   // focused row: item id (or "more:<id>") and the group it shows in
+  navKeys: [],         // the rows of the focused column at the last render, to refocus when one goes away
+  marks: new Set(),    // Space: marked task ids; actions apply to these if any
+  expanded: null,      // {id, g}: the main task whose "+N" line is opened in place
+  pending: "", msg: "", toast: "", last: null,
+  undo: [], redo: [],
+  filter: "", input: null, menu: null, field: 0, captureDue: TODAY,
+  colFocus: {},        // the row each column had focused last, so h l come back to it
+  colTy: {},           // fixed layout: where each column last sat, so it stays put once you leave it
+  railIdx: null, railLast: 0,
+  set: { moving: "stack", chrome: "cards", marks: "lift", menus: "separate", tab: "pill", motion: "normal", clip: "none" },
+  pend: null,          // Tab with the date pill: { ids, head, steps, row, started } until it is sent or cancelled
+  clipSeq: 0, clipOffered: -1,   // fake clipboard: each switch to a link is a new copy; a copy is offered once
+};
+const QS = [
+  { key: "moving", label: "Columns: moving", opts: [["stack", "Carousel, later ones stacked"], ["flat", "Done | Now | Upcoming, sliding"], ["fixed", "Done | Now | Upcoming, fixed"]] },
+  { key: "chrome", label: "Columns: windows", opts: [["cards", "Each task its own pane"], ["panes", "Three panes"]] },
+  { key: "marks", label: "Marked tasks", opts: [["lift", "Lifted"], ["dot", "Dot"]] },
+  { key: "menus", label: "Menus", opts: [["separate", "Separate (t, s, f)"], ["sheet", "One sheet"]] },
+  { key: "tab", label: "Tab in the list", opts: [["send", "Send at once"], ["pill", "Date pill, sends on next key"], ["timer", "Date pill, sends after 1 s"]] },
+  { key: "motion", label: "Motion", opts: [["off", "Off"], ["normal", "Normal"], ["slow", "Slow"]] },
+  { key: "clip", label: "Clipboard (fake)", opts: [["none", "Empty"], ["gitlab", "GitLab MR"], ["jira", "Jira ticket"], ["webex", "Webex space"], ["url", "URL (unreadable)"]] },
+];
+// What the fake clipboard holds: the link, a short label, the title the API would
+// return, and the task title quick capture makes from it on an empty field.
+// "url" stands for macOS only saying there is a URL: the placeholder can't show a
+// title, and the task is named after the link once it is read (on Return).
+const CLIPS = {
+  gitlab: { url: "https://gitlab.example.com/platform/web/-/merge_requests/431", label: "gitlab !431", title: "Export: stream large CSV files", task: "Review !431: Export: stream large CSV files" },
+  jira:   { url: "https://jira.example.com/browse/ABC-433", label: "jira ABC-433", title: "Timeout when exporting more than 50k rows", task: "ABC-433: Timeout when exporting more than 50k rows" },
+  webex:  { url: "webexteams://im?space=7d3b52e0-platform-team", label: "webex space", title: "Platform team", task: "Reply in Platform team" },
+  url:    { url: "https://gitlab.example.com/platform/web/-/merge_requests/431", label: "gitlab !431", title: null, task: "gitlab !431", ph: "Link from clipboard" },
+};
+// a clipboard link is offered (in capture, and when adding a link) until it is used
+// or explicitly dropped; Esc doesn't count, so it's back on the next capture
+const freshClip = () => CLIPS[S.set.clip] && S.clipOffered !== S.clipSeq ? CLIPS[S.set.clip] : null;
+const spendClip = () => { S.clipOffered = S.clipSeq; };
+
+// ---------- the time model
+// Groups: which date buckets they hold, and the date an item gets when it is moved there.
+const GROUPS = {
+  now:      { label: "Now",               keys: ["overdue", "today"], date: () => TODAY },
+  tomorrow: { label: "Tomorrow",          keys: ["tomorrow"],         date: () => TOMORROW },
+  week:     { label: "Rest of this week", keys: ["week"],             date: weekDay },
+  later:    { label: "Later",             keys: ["later"],            date: () => LATER },
+  none:     { label: "No date",           keys: ["none"],             date: () => null },
+};
+const TIMELINE = ["now", "tomorrow", "week", "later", "none"];   // after Done, in order
+const groupOfDue = d => TIMELINE.find(g => GROUPS[g].keys.includes(bucket(d)));
+// Columns per layout: Done, then columns of one or more groups.
+const LAYOUTS = {
+  stack: [["Done", []], ["Now", ["now"]], ["Tomorrow", ["tomorrow"]], ["Rest of this week", ["week"]], ["Later", ["later"]], ["No date", ["none"]]],
+  flat:  [["Done", []], ["Now", ["now"]], ["Upcoming", ["tomorrow", "week", "later", "none"]]],
+};
+LAYOUTS.fixed = LAYOUTS.flat;   // the same columns; they just don't slide
+const cols = () => LAYOUTS[S.set.moving].map(([label, groups]) => ({ label, groups, done: !groups.length }));
+const lastCol = () => cols().length - 1;
+const colOfGroup = g => g === "done" ? 0 : cols().findIndex(c => c.groups.includes(g));
+
+// ---------- items
+const byId = id => S.items.find(t => t.id === id);
+const isOpen = t => t.status === "open";
+const kids = id => S.items.filter(t => t.parent === id).sort((a, b) => (a.status !== "open") - (b.status !== "open"));
+const openKids = t => kids(t.id).filter(isOpen);
+const isGroup = t => !!(t && t.group);
+// A group is done when all its tasks are; it then lives in Done.
+const groupDone = g => { const ks = kids(g.id); return ks.length > 0 && ks.every(k => !isOpen(k)); };
+const topDone = t => isGroup(t) ? groupDone(t) : !isOpen(t);
+const doneAtOf = t => isGroup(t) ? kids(t.id).map(k => k.doneAt || "").sort().pop() : t.doneAt || "";
+// The date a top-level item sorts by: a task's own, a group's earliest open task's.
+function effDue(t) {
+  if (!isGroup(t)) return t.due;
+  return openKids(t).map(k => k.due).filter(Boolean).sort()[0] || null;
+}
+// Split across days: a group shows in every time group one of its open tasks falls on.
+const bucketsOf = t => isGroup(t) ? [...new Set(openKids(t).map(k => bucket(k.due)))] : [bucket(t.due)];
+const matches = (t, q) => t.title.toLowerCase().includes(q.toLowerCase());
+const tops = () => S.items.filter(t => !t.parent && (!S.filter || matches(t, S.filter) || kids(t.id).some(k => matches(k, S.filter))));
+// Order within a group: open first, overdue on top (oldest first), then the manual
+// order, which is simply the order of S.items (sort is stable).
+const sortTops = ts => ts.sort((a, b) => topDone(a) - topDone(b));
+
+// ---------- what a column shows, and what j/k walks
+// A column is a list of time groups; a time group is a list of blocks: a task on
+// its own, or a group heading with the tasks shown here and a "+N" line for its
+// tasks elsewhere (other days, or done). Rendering and j/k both read this, so they
+// always agree.
+function columnContent(i) {
+  const c = cols()[i];
+  if (c.done) {
+    // Done follows the split rule too: a group shows here as soon as one of its
+    // tasks is done, with only its done tasks and a "+N open" line for the rest
+    const ts = tops().filter(t => topDone(t) || (isGroup(t) && kids(t.id).some(k => !isOpen(k))))
+      .sort((a, b) => doneAtOf(b).localeCompare(doneAtOf(a)));
+    return [{ g: "done", label: null, blocks: ts.map(t => blockOf(t, "done", "done")) }];
+  }
+  return c.groups.map(g => {
+    const keys = GROUPS[g].keys;
+    const ts = sortTops(tops().filter(t => !topDone(t) && bucketsOf(t).some(b => keys.includes(b))));
+    return { g, label: c.groups.length > 1 ? GROUPS[g].label : null, blocks: ts.map(t => blockOf(t, keys, g)) };
+  });
+}
+function blockOf(t, keys, g) {
+  const all = kids(t.id);
+  const here = keys === "done" ? all.filter(k => !isOpen(k)) : keys ? all.filter(k => isOpen(k) && keys.includes(bucket(k.due))) : all;
+  const rest = all.filter(k => !here.includes(k));
+  const open = S.expanded && S.expanded.id === t.id && S.expanded.g === g;
+  return {
+    t, g,
+    kids: (open ? all : here).map(k => ({ t: k, other: !here.includes(k) })),
+    more: !open && rest.length ? { open: rest.filter(isOpen), done: rest.filter(k => !isOpen(k)) } : null,
+  };
+}
+const rowsOf = b => [{ id: b.t.id, g: b.g, t: b.t, head: isGroup(b.t) },
+  ...b.kids.map(k => ({ id: k.t.id, g: b.g, t: k.t, other: k.other })),
+  ...(b.more ? [{ id: "more:" + b.t.id, g: b.g, more: { t: b.t, ...b.more } }] : [])];
+const nav = (i = S.col) => columnContent(i).flatMap(gr => gr.blocks.flatMap(rowsOf));
+const isMore = id => typeof id === "string" && id.startsWith("more:");
+
+// ---------- focus
+const sameRow = (r, id, g) => r.id === id && (g == null || r.g === g);
+function focusIndex(list) { const i = list.findIndex(r => sameRow(r, S.focus, S.fg)); return i >= 0 ? i : list.findIndex(r => r.id === S.focus); }
+function setFocus(r) { S.focus = r ? r.id : null; S.fg = r ? r.g : null; }
+const focusRow = () => { const l = nav(), i = focusIndex(l); return i >= 0 ? l[i] : null; };
+// Keep the focus on a row that exists. When the focused row went away (sent,
+// done, deleted, filtered), take the next row that is still here, else the one before.
+function ensureFocus() {
+  const list = nav();
+  if (!list.length) return setFocus(null);
+  const i = focusIndex(list); if (i >= 0) return setFocus(list[i]);
+  const here = r => list.find(x => sameRow(x, r.id, r.g));
+  const old = S.navKeys, j = old.findIndex(r => sameRow(r, S.focus, S.fg));
+  setFocus((j >= 0 && (old.slice(j + 1).map(here).find(Boolean) || old.slice(0, j).reverse().map(here).find(Boolean))) || list[0]);
+}
+// an opened "+N" line closes again once the focus leaves that task
+function collapseExpanded() {
+  const e = S.expanded; if (!e) return;
+  const f = byId(S.focus);
+  const inside = S.fg === e.g && (S.focus === e.id || S.focus === "more:" + e.id || (f && f.parent === e.id));
+  if (!inside) S.expanded = null;
+}
+
+// ---------- undo (marks are not part of it)
+function snapshot() { return JSON.stringify({ items: S.items, focus: S.focus, fg: S.fg, col: S.col, seq }); }
+function restore(s) { const o = JSON.parse(s); S.items = o.items; S.focus = o.focus; S.fg = o.fg; S.col = Math.min(o.col, lastCol()); seq = o.seq; }
+function mutate(fn, msg) { S.undo.push(snapshot()); S.redo = []; fn(); if (msg) S.msg = msg; }
+function undo() { if (!S.undo.length) return say("Already at oldest change"); S.redo.push(snapshot()); restore(S.undo.pop()); say("Undone"); }
+function redo() { if (!S.redo.length) return say("Already at newest change"); S.undo.push(snapshot()); restore(S.redo.pop()); say("Redone"); }
+function say(m) { S.msg = m; }
+
+// ---------- actions apply to the marked items, or else the focused one
+const markedItems = () => [...S.marks].map(byId).filter(Boolean);
+function targets() {
+  const m = markedItems(); if (m.length) return m;
+  const t = byId(S.focus); return t ? [t] : [];
+}
+// The tasks behind targets: a group stands for its open tasks shown where you are
+// (the focused time group, or with marks the whole column), else all its open
+// ones; in Done, for all its tasks.
+function tasksOf(ts) {
+  const c = cols()[S.col];
+  const keys = c.done ? null : !S.marks.size && S.fg && GROUPS[S.fg] ? GROUPS[S.fg].keys : c.groups.flatMap(g => GROUPS[g].keys);
+  return [...new Set(ts.flatMap(t => {
+    if (!isGroup(t)) return [t];
+    if (!keys) return kids(t.id).filter(k => !isOpen(k));   // Done: the done tasks shown there
+    const open = openKids(t), here = open.filter(k => keys.includes(bucket(k.due)));
+    return here.length ? here : open;
+  }))];
+}
+function toggleMark(t) {
+  if (!t) return say("Nothing to mark here");
+  if (isGroup(t)) {
+    // a heading marks the tasks it shows HERE, never the group as such: the same
+    // group elsewhere (other days, Done) stays unmarked
+    const b = columnContent(S.col).flatMap(gr => gr.blocks).find(b => b.t.id === t.id && b.g === S.fg);
+    const ts = b ? b.kids.filter(k => !k.other).map(k => k.t) : [];
+    if (!ts.length) return say("No tasks here to mark");
+    const all = ts.every(k => S.marks.has(k.id));
+    ts.forEach(k => all ? S.marks.delete(k.id) : S.marks.add(k.id));
+  } else if (S.marks.has(t.id)) S.marks.delete(t.id); else S.marks.add(t.id);
+  const n = markedItems().length;
+  say(n ? "actions apply to the marks · Esc clears them" : "No marks");
+}
+// done and deleted items drop their marks; moved ones keep them
+const unmark = ts => ts.forEach(t => S.marks.delete(t.id));
+function markDone(ts, spent) {
+  mutate(() => ts.forEach(t => { t.status = "done"; t.doneAt = TODAY; if (spent != null) t.spent = spent; }),
+    (ts.length > 1 ? `${plural(ts.length, "task")} done` : "Done") + (spent != null ? ` · ${spentLabel(spent)}` : ""));
+  unmark(ts);
+}
+// ---------- several tasks (x or s with marks, or on a group heading) are asked
+// ONE BY ONE: the time menu (or the sheet's Time row) stays open, its header names
+// the current task, which is highlighted. Return (or a digit) handles it and moves
+// on; shift+Return (or shift+digit) applies to all the rest; Esc stops (handled
+// ones stay done, the rest stay open). The whole run is one undo step.
+const runCur = () => { const r = S.menu && S.menu.run; return r ? byId(r.ids[r.i]) : null; };
+const isAsking = t => { const c = runCur(); return !!c && c.id === t.id; };
+function startRun(m, ids, then) {
+  if (ids.length < 2) return;
+  m.run = { ids, i: 0, then, n: ids.length, items: JSON.stringify(S.items), snap: snapshot(), undoLen: S.undo.length };
+}
+// the time option a task starts on: what it has logged, else 15m
+const startTime = (t, opts) => { const i = t && t.spent != null ? opts.findIndex(o => o[1] === t.spent) : -1; return i >= 0 ? i : 1; };
+function runApply(v, all) {
+  const r = S.menu.run, ts = (all ? r.ids.slice(r.i) : [r.ids[r.i]]).map(byId).filter(Boolean);
+  ts.forEach(t => {
+    if (r.then === "done") { t.status = "done"; t.doneAt = TODAY; if (v != null) t.spent = v; }
+    else t.spent = v;
+  });
+  if (r.then === "done") unmark(ts);
+  r.i += all ? r.ids.length - r.i : 1;
+  if (r.i >= r.ids.length) return runEnd(false);
+  // the next task starts on its own logged time, else 15m
+  const c = runCur();
+  if (S.menu.type === "sheet") S.menu.idx.time = startTime(c, SHEET_TIME(S.menu.then));
+  else S.menu.index = startTime(c, TIME_OPTS(S.menu.then));
+  say(`${r.i} of ${r.n} ${r.then === "done" ? "done" : "logged"}`);
+}
+function runEnd(stopped) {
+  const r = S.menu.run; closeMenu();
+  const changed = JSON.stringify(S.items) !== r.items;
+  S.undo.length = r.undoLen;
+  if (changed) { S.undo.push(r.snap); S.redo = []; }
+  const left = r.n - r.i;
+  say(`${r.i} of ${r.n} ${r.then === "done" ? "done" : "logged"}${stopped && left ? ` · ${left} left ${r.then === "done" ? "open" : "as they were"}` : ""}${changed ? " · u undoes the run" : ""}`);
+}
+
+// x: done (asks the time spent); on done tasks: reopen. ts are tasks (see tasksOf).
+// Several open tasks (marks, or a group heading) are asked one by one: see the run below.
+function toggleDone(ts) {
+  if (!ts.length) return say("Nothing open here");
+  if (ts.every(t => !isOpen(t))) { unmark(ts); return mutate(() => ts.forEach(t => { t.status = "open"; t.doneAt = null; }), ts.length > 1 ? `${plural(ts.length, "task")} reopened` : "Reopened"); }
+  unmark(ts.filter(t => !isOpen(t)));
+  if (sheetOn()) return openSheet("time", { then: "done", time: ts.filter(isOpen) });
+  openMenu("time", ts.filter(isOpen).map(t => t.id), "done");
+}
+// dd: a group goes with its tasks; a group whose last task goes, goes too
+function remove(ts) {
+  if (!ts.length) return;
+  const gone = new Set(ts.flatMap(t => [t.id, ...kids(t.id).map(k => k.id)]));
+  const empty = S.items.filter(g => isGroup(g) && !gone.has(g.id) && kids(g.id).every(k => gone.has(k.id)));
+  empty.forEach(g => gone.add(g.id));
+  const nk = [...gone].filter(id => !isGroup(byId(id))).length, ng = [...gone].filter(id => isGroup(byId(id))).length;
+  mutate(() => { S.items = S.items.filter(t => !gone.has(t.id)); },
+    `Deleted ${[nk ? plural(nk, "task") : "", ng ? plural(ng, "group") : ""].filter(Boolean).join(" and ")} · u to undo`);
+  gone.forEach(id => S.marks.delete(id));
+}
+// Giving tasks a date; a done task is reopened (a date means "do it then").
+function dateTasks(ts, due) {
+  ts.forEach(t => { t.due = due; if (!isOpen(t)) { t.status = "open"; t.doneAt = null; } });
+}
+function setDue(ts, due) {
+  if (!ts.length) return say("Nothing to date here");
+  S.last = x => setDue(tasksOf(x), due);
+  mutate(() => dateTasks(ts, due));
+  say(`Due: ${due ? dueLabel(due) : "no date"}${ts.length > 1 ? ` · ${plural(ts.length, "task")}` : ""}`);
+}
+// + - ^a ^x: the date one step later or earlier (today, tomorrow, Friday, Monday, a week on)
+const STEPS = () => [...new Set([TODAY, TOMORROW, EOW, NEXT_MON, iso(addDays(parseIso(NEXT_MON), 7))])].sort();
+function shift(ts, dir) {
+  ts = ts.filter(isOpen); if (!ts.length) return say("Nothing open here");
+  const steps = STEPS();
+  const next = d => dir > 0 ? (!d ? TODAY : steps.find(s => s > d) || iso(addDays(parseIso(d), 7)))
+                            : (d && d > TODAY ? [...steps].reverse().find(s => s < d) || TODAY : d);
+  mutate(() => ts.forEach(t => dateTasks([t], next(t.due))));
+  say(ts.length === 1 ? `Due: ${dueLabel(ts[0].due) || "no date"}` : `${plural(ts.length, "task")} ${dir > 0 ? "later" : "earlier"}`);
+}
+// >> << Tab ⇧Tab: send each task one step along Done, Now, Tomorrow, Rest of week,
+// Later, No date. You stay where you are; sending into Done means done.
+const stepOf = t => isOpen(t) ? TIMELINE.indexOf(groupOfDue(t.due)) : -1;
+function stepTo(from, dir) {
+  for (let s = from + dir; s >= 0 && s < TIMELINE.length; s += dir) { const d = GROUPS[TIMELINE[s]].date(); if (d !== undefined) return { g: TIMELINE[s], d }; }
+  return null;
+}
+function send(ts, dir) {
+  if (!ts.length) return say("Nothing to send here");
+  S.last = x => send(tasksOf(x), dir);
+  const toDone = ts.filter(t => isOpen(t) && dir < 0 && stepOf(t) === 0);
+  const moves = ts.filter(t => !toDone.includes(t)).map(t => [t, stepTo(stepOf(t), dir)]).filter(m => m[1]);
+  if (moves.length) mutate(() => moves.forEach(([t, s]) => dateTasks([t], s.d)),
+    moves.length === 1 ? `→ ${GROUPS[moves[0][1].g].label}${moves[0][1].d ? ` (${dueLabel(moves[0][1].d)})` : ""}` : `${plural(moves.length, "task")} sent ${dir > 0 ? "later" : "earlier"}`);
+  else if (!toDone.length) say(dir > 0 ? "Already as late as it goes" : "Already done");
+  if (toDone.length) toggleDone(toDone);
+}
+// Sending n steps at once (the date pill, and . after it): each task moves n
+// steps from where it is, skipping groups with no date; never into Done.
+function targetOf(t, n) {
+  let s = stepOf(t), to = null, i = 0;
+  // overdue: the first step later is today (still Now, no longer overdue)
+  if (n > 0 && isOpen(t) && t.due && t.due < TODAY) { to = { g: "now", d: TODAY }; i = 1; }
+  for (; i < Math.abs(n); i++) { const nx = stepTo(s, Math.sign(n)); if (!nx) return null; to = nx; s = TIMELINE.indexOf(nx.g); }
+  return to;
+}
+function sendSteps(ts, n) {
+  S.last = x => sendSteps(tasksOf(x), n);
+  const moves = ts.filter(isOpen).map(t => [t, targetOf(t, n)]).filter(m => m[1]);
+  if (!moves.length) return say("Nothing to send here");
+  mutate(() => moves.forEach(([t, to]) => dateTasks([t], to.d)),
+    moves.length === 1 ? `→ ${GROUPS[moves[0][1].g].label}${moves[0][1].d ? ` (${dueLabel(moves[0][1].d)})` : ""}` : `${plural(moves.length, "task")} sent ${n > 0 ? "later" : "earlier"}`);
+}
+// ---------- Tab with a date pill ("Tab in the list": pill / timer). Without
+// marks, Tab doesn't send at once: the task stays put and shows where it will go
+// ("→ tomorrow"); more Tabs step the pill on, Shift+Tab back (back to where it is:
+// cancelled). The next other key sends it (one undo step), then does its own job;
+// Esc cancels. With "timer" it also goes by itself 1 s after the last Tab.
+const PEND_MS = 1000;
+const pillMode = () => S.set.tab !== "send";
+function pendStart(dir) {
+  const t = byId(S.focus), ts = tasksOf(targets()).filter(isOpen);
+  if (!t || !ts.length) return send(tasksOf(targets()), dir);   // done tasks: as before
+  // with marks, every marked task shows its own pill, wherever it is
+  const marked = S.marks.size > 0;
+  S.pend = { ids: ts.map(x => x.id), head: !marked && isGroup(t) ? t.id : null, marked, steps: 0, row: { id: S.focus, g: S.fg } };
+  pendStep(dir);
+}
+function pendStep(dir) {
+  const p = S.pend, n = p.steps + dir;
+  if (n === 0) return pendCancel("Back where it was");
+  const ts = p.ids.map(byId).filter(Boolean);
+  if (!ts.some(t => targetOf(t, n))) {
+    if (!p.steps) S.pend = null;
+    return say(dir > 0 ? "Already as late as it goes" : "Earlier than Now is done: x");
+  }
+  p.steps = n; p.started = Date.now();
+  pendTimer();
+  const to = pendTarget();
+  say(`${to ? `→ ${GROUPS[to.g].label}` : ""} · Tab later · ⇧Tab earlier · ${S.set.tab === "timer" ? "goes in 1 s · " : ""}any key sends · Esc cancels`);
+}
+const pendTarget = () => { const p = S.pend; if (!p) return null; for (const id of p.ids) { const to = targetOf(byId(id), p.steps); if (to) return to; } return null; };
+function pendTimer() {
+  if (S.pendT) { clearTimeout(S.pendT); S.pendT = null; }
+  if (S.set.tab === "timer" && S.pend) S.pendT = setTimeout(() => { S.pendT = null; if (S.pend) { pendCommit(); render(); } }, PEND_MS);
+}
+function pendCancel(msg) {
+  if (S.pendT) { clearTimeout(S.pendT); S.pendT = null; }
+  S.pend = null; say(msg || "Cancelled");
+}
+// send it; the focus goes to the next row, as sending does
+function pendCommit() {
+  const p = S.pend; if (!p) return;
+  if (S.pendT) { clearTimeout(S.pendT); S.pendT = null; }
+  S.pend = null;
+  sendSteps(p.ids.map(byId).filter(Boolean), p.steps);
+  if (S.view === "list") ensureFocus();
+}
+// ---------- menus: due (t + letter), time spent, links
+const DUE_OPTS = () => [["Today", TODAY, "t"], ["Tomorrow", TOMORROW, "m"], ["End of week", EOW, "w"], ["Next week", NEXT_MON, "n"], ["No date", null, "-"]];
+// none / skip first, so the digits match: 0 none, 1 15m … 6 1d
+const TIME_OPTS = then => [[then === "done" ? "Skip" : "None", null], ["15 min", 15], ["30 min", 30], ["1 hour", 60], ["2 hours", 120], ["Half day", 240], ["Full day", 480]];
+// f: links get a short label and a hint letter (home row first; never h j k l,
+// and not d or o, which remove and add links in the menu)
+const HINTS = "asgqwertyuipzcvbnm";  // no f (closes the menu, as in Vimium), no x (removes a link)
+function linkLabel(l) {
+  let m;
+  if ((m = l.match(/\/browse\/([A-Z][A-Z0-9]+-\d+)/))) return `jira ${m[1]}`;
+  if ((m = l.match(/merge_requests\/(\d+)/))) return `gitlab !${m[1]}`;
+  if (/^webexteams:/i.test(l)) return "webex space";
+  if ((m = l.match(/^([a-z]+):\s*(\S+)/i)) && !/^https?$/i.test(m[1])) return `${m[1].toLowerCase()} ${m[2]}`;
+  const [host, ...rest] = l.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/");
+  const path = rest.join("/");
+  return host + (path ? "/" + (path.length > 18 ? path.slice(0, 17) + "…" : path) : "");
+}
+// the links, then "+ add" on a task (o is its key)
+const LINK_OPTS = () => S.menu.links.map((l, i) => [l.label, l.url, HINTS[i]])
+  .concat(isGroup(byId(S.menu.ids[0])) ? [] : [["+ add", "add", "o"]]);
+const menuOpts = () => S.menu.type === "due" ? DUE_OPTS() : S.menu.type === "links" ? LINK_OPTS() : TIME_OPTS(S.menu.then);
+function openMenu(type, ids, then) {
+  if (!ids.length) return say("Nothing here");
+  const one = ids.length === 1 ? byId(ids[0]) : null;
+  S.menu = { type, ids, then, index: 0, links: type === "links" ? then : null };
+  if (type === "time") {
+    startRun(S.menu, ids, then === "done" ? "done" : "log");
+    S.menu.index = startTime(one || runCur(), TIME_OPTS(then));
+  } else {
+    const cur = one && type === "due" ? one.due : undefined;
+    S.menu.index = Math.max(0, menuOpts().findIndex(o => o[1] === cur));
+  }
+  S.mode = "menu";
+}
+function closeMenu() { S.menu = null; S.mode = "normal"; }
+function pick(i, all) {
+  const o = menuOpts()[i]; if (!o) return;
+  if (S.menu.run) return runApply(o[1], all);
+  if (S.menu.type === "links" && o[1] === "add") return addLink();
+  const m = S.menu, ts = m.ids.map(byId).filter(Boolean); closeMenu();
+  if (m.type === "links") return openLink(o[1]);
+  if (m.type === "due") return setDue(ts, o[1]);
+  if (m.then === "done") return markDone(ts, o[1]);
+  mutate(() => ts.forEach(t => { t.spent = o[1]; }), o[1] == null ? "Time cleared" : `Time spent: ${spentLabel(o[1])}`);
+}
+// shift: shift held (shift+Return, and shift+digit arrives as "⇧3")
+function menuKey(k, shift) {
+  if (S.menu.type === "sheet") return sheetKey(k, shift);
+  if (S.menu.type === "links") {
+    const dd = S.menu.d; S.menu.d = false;
+    if (k === "o") return addLink();
+    if (k === "f") { closeMenu(); say(""); return; }
+    if (k === "x") return removeLink();
+    if (k === "d") { if (dd) removeLink(); else { S.menu.d = true; say("d: dd (or x) removes the selected link"); } return; }
+  }
+  const n = menuOpts().length;
+  if (!n) { if (k === "Escape" || k === "h") { closeMenu(); say(""); } return; }
+  if (k === "j" || k === "ArrowDown") S.menu.index = (S.menu.index + 1) % n;
+  else if (k === "k" || k === "ArrowUp") S.menu.index = (S.menu.index + n - 1) % n;
+  else if (k === "Enter" || k === "l") pick(S.menu.index, shift && k === "Enter");
+  else if (S.menu.type === "time" && /^[0-9]$/.test(k)) pick(+k);
+  else if (S.menu.type === "time" && /^⇧[0-9]$/.test(k)) pick(+k[1], true);
+  else if (/^[1-9]$/.test(k)) pick(+k - 1);
+  else if (S.menu.run && (k === "Escape" || k === "h")) runEnd(true);
+  else if (k === "Escape" || k === "h") { closeMenu(); say("Cancelled"); }
+  else if (S.menu.type === "due" && k === "x") pick(menuOpts().findIndex(o => o[1] === null));   // tx: quiet alias of t-
+  else { const i = menuOpts().findIndex(o => o[2] === k); if (i >= 0) pick(i); }
+}
+// f (or gx): always a menu, even for one link, so a browser never opens on the
+// wrong link by accident. Only the focused item, never the marks. On a group
+// heading: the links of its tasks. The prototype only says where it would go.
+function openLink(url) { S.toast = `Would open ${url}`; say(""); }
+// The menu always opens, also without links (then only "+ add"); o or "+ add"
+// adds a link, x (or dd) removes the selected one. Each entry knows which task holds it.
+function linksOf(t) {
+  return isGroup(t)
+    ? kids(t.id).flatMap(k => (k.links || []).map(url => ({ url, id: k.id, label: `${linkLabel(url)} · ${k.title.slice(0, 22)}` })))
+    : (t.links || []).map(url => ({ url, id: t.id, label: linkLabel(url) }));
+}
+function followLink(index) {
+  const t = byId(S.focus);
+  if (!t) return say("Nothing here");
+  openMenu("links", [t.id], linksOf(t).slice(0, HINTS.length));
+  if (index != null) S.menu.index = Math.max(0, Math.min(index, S.menu.links.length - 1));
+  say(!S.menu.links.length && isGroup(t) ? "No links in this group" : "");
+}
+function addLink() {
+  const t = byId(S.menu.ids[0]);
+  if (!t || isGroup(t)) return say("Add links on a task");
+  S.mode = "insert"; S.input = { kind: "link", id: t.id, value: "", clip: freshClip() };
+  say("Paste a URL or ticket · Return adds · Esc leaves");
+}
+function removeLink() {
+  const l = S.menu.links[S.menu.index]; if (!l) return say("No link to remove");
+  const t = byId(l.id), at = S.menu.index;
+  mutate(() => { t.links = t.links.filter(u => u !== l.url); }, `Link removed: ${l.label.split(" · ")[0]} · u to undo`);
+  const msg = S.msg; followLink(at); S.msg = msg;
+}
+
+// ---------- the sheet ("Menus: One sheet"): due, time and links as one row each
+// below the task. A live sheet: on the Due and Time rows h l change the value
+// directly (the selection IS the value), j k change rows, and Esc or Return close
+// it, keeping what was set (vim: closing never reverts, u does). The values are
+// held in the sheet and written in one step on close, so the whole session is one
+// undo step and the task stays put on the board until then (then it is sent).
+// The Links row is an action row: Return opens the selected link. Every key has
+// ONE meaning in the whole sheet, whatever row is selected: t m w n set the date,
+// - clears it, 0-6 set the time, o adds a link, x removes the selected one. t s f
+// open the sheet on their row (s and f again close it; t is "today" inside).
+// x (done) opens only the Time row: a confirm, Return marks done, Esc cancels.
+const sheetOn = () => S.set.menus === "sheet";
+const SHEET_DUE = () => [["today", TODAY, "t"], ["tomorrow", TOMORROW, "m"], [WD[parseIso(EOW).getDay()], EOW, "w"], ["next wk", NEXT_MON, "n"], ["none", null, "-"]];
+const SHEET_TIME = then => [[then === "done" ? "skip" : "none", null], ["15m", 15], ["30m", 30], ["1h", 60], ["2h", 120], ["½d", 240], ["1d", 480]];
+function sheetOpts(row) {
+  const m = S.menu;
+  if (row === "due") return SHEET_DUE();
+  if (row === "time") return SHEET_TIME(m.then);
+  const host = byId(m.linkHost);
+  return m.links.map(l => [l.label, l.url]).concat(host && !isGroup(host) ? [["+ add", "add"]] : []);
+}
+// o: { then: "done", time: tasks } for x; else the targets decide. Links come
+// first (the most used row). s on several tasks (or x) gives a Time-only sheet
+// that steps through them one by one (the run above).
+function openSheet(row, o = {}) {
+  const t = byId(S.focus), tg = targets();
+  if (!t && !tg.length) return say("Nothing here");
+  let then = o.then || "log";
+  const time = o.time || (!S.marks.size && isGroup(t) ? tasksOf([t]).filter(isOpen) : tasksOf(tg).filter(x => !isGroup(x)));
+  const stepping = time.length > 1 && (then === "done" || row === "time");
+  const due = then === "done" || stepping ? [] : tasksOf(tg);
+  const links = then === "done" || stepping || !t ? [] : linksOf(t);
+  // t s f show only their own row (o.only); Return shows all three. j k on a
+  // single row expand it to the full sheet, so nothing is out of reach.
+  const prev = S.menu && S.menu.type === "sheet" ? S.menu : null;
+  const full = then === "done" || stepping ? null : ["links", "due", "time"];
+  const rows = !full ? ["time"] : o.only ? [row] : prev && o.link != null ? prev.rows : full;
+  S.menu = { type: "sheet", then, rows, full, row: Math.max(0, rows.indexOf(row)),
+    due: due.map(x => x.id), time: time.map(x => x.id), links, linkHost: t ? t.id : null,
+    idx: { due: -1, time: -1, links: 0 }, pend: { due: undefined, time: undefined }, d: false };
+  // each row starts on the current value: no date starts on "none", no time on
+  // "none" (left of 15m); several tasks with different values start on nothing
+  const same = vals => vals.length && vals.every(v => v === vals[0]) ? vals[0] : undefined;
+  const cd = same(due.map(x => x.due)), ct = same(time.map(x => x.spent == null ? null : x.spent));
+  if (cd !== undefined) S.menu.idx.due = SHEET_DUE().findIndex(x => x[1] === cd);
+  if (stepping) { startRun(S.menu, time.map(x => x.id), then === "done" ? "done" : "log"); S.menu.idx.time = startTime(runCur(), SHEET_TIME(then)); }
+  else if (then === "done") S.menu.idx.time = startTime(time[0], SHEET_TIME(then));   // x: 15m unless already logged
+  else if (ct !== undefined) S.menu.idx.time = SHEET_TIME(then).findIndex(x => x[1] === ct);
+  if (o.link != null) S.menu.idx.links = Math.max(0, Math.min(o.link, sheetOpts("links").length - 1));
+  // adding or removing a link reopens the sheet: what was set so far carries over
+  if (prev && o.link != null) { S.menu.pend = prev.pend; S.menu.idx.due = prev.idx.due; S.menu.idx.time = prev.idx.time; }
+  S.mode = "menu";
+  say(S.menu.run ? "h l or 0–6 pick · Return: this one · ⇧Return: all the rest · Esc stops" : rows.length === 1 ? "h l or 0–6 pick the time · Return marks done · Esc cancels" : "");
+}
+// the current value of a row, for one task (undefined: none to show)
+function sheetCur(row) {
+  const m = S.menu, ids = row === "due" ? m.due : m.run ? [m.run.ids[m.run.i]] : m.time;
+  if (ids.length !== 1) return undefined;
+  const t = byId(ids[0]); return row === "due" ? t.due : t.spent;
+}
+function sheetKey(k, shift) {
+  const m = S.menu, row = m.rows[m.row], dd = m.d, confirm = m.then === "done" || !!m.run; m.d = false;
+  // several tasks in a full sheet: their time is logged one by one, not here
+  const multi = !confirm && m.time.length > 1;
+  const stop = () => m.run ? runEnd(true) : (closeMenu(), say("Cancelled"));
+  if (k === "Escape") return confirm ? stop() : sheetClose();
+  if (multi && (k === "s" || (k === "Enter" && row === "time"))) { sheetClose(); return openSheet("time"); }
+  // s and f: their row (again: close); t is a date letter in the sheet (today)
+  const jump = { s: "time", f: "links" }[k];
+  if (jump) {
+    if (row === jump || !(m.full || m.rows).includes(jump)) return confirm ? stop() : sheetClose();
+    if (!m.rows.includes(jump)) m.rows = m.full;   // a single-row sheet grows to the full one
+    m.row = m.rows.indexOf(jump); return say("");
+  }
+  // date letters, from any row: the value is set live, the row selection stays
+  const di = SHEET_DUE().findIndex(x => x[2] === k);
+  if (di >= 0) {
+    if (confirm || !m.due.length) return say(confirm ? "Only the time here · Return marks done" : "No date to set here");
+    return sheetSet("due", di);
+  }
+  // o and x: add a link, remove the selected one, from any row (a single-row
+  // sheet grows so the Links row shows what happened)
+  if ((k === "o" || k === "x") && !confirm) {
+    if (!m.rows.includes("links")) { if (!m.full) return; m.rows = m.full; m.row = m.rows.indexOf(row); }
+    return k === "o" ? sheetAddLink() : sheetRemoveLink();
+  }
+  const dir = k === "j" || k === "ArrowDown" ? 1 : k === "k" || k === "ArrowUp" ? -1 : 0;
+  if (dir) {
+    if (m.full && m.rows.length < m.full.length) { m.rows = m.full; m.row = m.rows.indexOf(row); }   // expand
+    m.row = Math.max(0, Math.min(m.rows.length - 1, m.row + dir)); return say("");
+  }
+  const opts = sheetOpts(row);
+  // digits pick the time by position (0 none/skip, 1 15m … 6 1d); shifted: all the rest
+  const dg = /^[0-9]$/.test(k) ? +k : /^⇧[0-9]$/.test(k) ? +k[1] : -1;
+  if (dg >= 0 && (m.full || m.rows).includes("time")) {
+    if (multi) return say("Several tasks: s logs their time one by one");
+    const to = SHEET_TIME(m.then)[dg]; if (!to) return;
+    if (m.run) return runApply(to[1], dg >= 0 && k[0] === "⇧");
+    if (confirm) { closeMenu(); return markDone(m.time.map(byId).filter(Boolean), to[1]); }
+    return sheetSet("time", dg);   // live; the row selection stays where it is
+  }
+  if (multi && row === "time" && (k === "h" || k === "l" || k === "ArrowLeft" || k === "ArrowRight")) return say("Several tasks: s (or Return here) logs their time one by one");
+  if (k === "h" || k === "ArrowLeft" || k === "l" || k === "ArrowRight") {
+    const dir = k === "h" || k === "ArrowLeft" ? -1 : 1;
+    const i = m.idx[row] < 0 ? 0 : Math.max(0, Math.min(opts.length - 1, m.idx[row] + dir));
+    return row === "links" ? (m.idx.links = i, say("")) : sheetSet(row, i);
+  }
+  if (k === "Enter") {
+    if (m.run) { const o = opts[m.idx.time]; return runApply(o ? o[1] : null, shift); }
+    if (confirm) { const o = opts[m.idx.time]; closeMenu(); return markDone(m.time.map(byId).filter(Boolean), o ? o[1] : null); }
+    if (row !== "links") return sheetClose();
+    const o = opts[m.idx.links];
+    if (!o) return sheetClose();
+    if (o[1] === "add") return sheetAddLink();
+    sheetClose(); return openLink(o[1]);
+  }
+  if (row === "links" && k === "d") { if (dd) return sheetRemoveLink(); m.d = true; return say("d: dd (or x) removes the selected link"); }
+  if (k.length === 1) say(`${k}: not in the sheet · j k rows · h l values · Esc or Return close, keeping them`);
+}
+// h l, a date letter or a digit: the selection is the value. In the x flow
+// nothing is set yet; Return decides.
+function sheetSet(row, i) {
+  const m = S.menu, o = sheetOpts(row)[i]; if (!o) return;
+  m.idx[row] = i;
+  if (m.then === "done") return say("");
+  m.pend[row] = o[1];
+  say(row === "due" ? `Due: ${o[1] ? dueLabel(o[1]) : "no date"} · sent when the sheet closes` : `Time: ${o[1] == null ? "none" : spentLabel(o[1])}`);
+}
+// The value a task shows while the sheet is open: the sheet's, else its own.
+function sheetPend(row) { const m = S.menu; return m && m.type === "sheet" && m.then !== "done" && m.pend[row] !== undefined ? m : null; }
+function dueShown(t) { const m = sheetPend("due"); return m && m.due.includes(t.id) ? m.pend.due : t.due; }
+function spentShown(t) {
+  const m = sheetPend("time"); if (!m) return t.spent;
+  return m.time.includes(t.id) ? m.pend.time : t.spent;
+}
+// Esc or Return: close, writing what was set as ONE undo step; a new date sends
+// the tasks (the view stays, the focus moves on, as with tm).
+function sheetClose() {
+  const m = S.menu; closeMenu();
+  const dts = m.due.map(byId).filter(Boolean), tts = m.time.map(byId).filter(Boolean), p = m.pend;
+  const dueCh = p.due !== undefined && dts.some(t => t.due !== p.due);
+  const timeCh = p.time !== undefined && tts.some(t => t.spent !== p.time);
+  if (!dueCh && !timeCh) return say("");
+  if (dueCh) S.last = x => setDue(tasksOf(x), p.due);
+  mutate(() => {
+    if (dueCh) dateTasks(dts, p.due);
+    if (timeCh) tts.forEach(t => { t.spent = p.time; });
+  });
+  const n = dts.length > 1 ? ` · ${plural(dts.length, "task")}` : "";
+  say([dueCh ? `Due: ${p.due ? dueLabel(p.due) : "no date"}${n}` : "", timeCh ? `time: ${p.time == null ? "none" : spentLabel(p.time)}` : ""].filter(Boolean).join(" · ") + " · u undoes both");
+}
+function sheetAddLink() {
+  const t = byId(S.menu.linkHost);
+  if (!t || isGroup(t)) return say("Add links on a task");
+  if (!S.menu.rows.includes("links") && S.menu.full) S.menu.rows = S.menu.full;
+  S.menu.row = S.menu.rows.indexOf("links");
+  S.mode = "insert"; S.input = { kind: "link", id: t.id, value: "", clip: freshClip(), sheet: true };
+  say("Paste a URL or ticket · Return adds · Esc leaves");
+}
+function sheetRemoveLink() {
+  const m = S.menu, l = m.links[m.idx.links]; if (!l) return say("No link to remove");
+  const t = byId(l.id), at = m.idx.links;
+  mutate(() => { t.links = t.links.filter(u => u !== l.url); }, `Link removed: ${l.label.split(" · ")[0]} · u to undo`);
+  const msg = S.msg; openSheet("links", { link: at }); S.msg = msg;
+}
+
+// ---------- text inputs
+function startInsert(t, how, isNew) { S.focus = t.id; S.mode = "insert"; S.input = { kind: "title", id: t.id, value: how === "replace" ? "" : t.title, caret: how, isNew }; }
+function commitInput(viaEsc) {
+  const inp = S.input; if (!inp) return;
+  S.input = null; S.mode = "normal";
+  if (inp.kind === "title") {
+    const t = byId(inp.id), v = inp.value.trim();
+    if (!v && inp.isNew) { restore(S.undo.pop()); return say(inp.isNew === "convert" ? "Empty task discarded · a plain task again" : "Empty task discarded"); }
+    const changed = v && v !== t.title;
+    if (changed) { if (!inp.isNew) S.undo.push(snapshot()); t.title = v; }
+    say(inp.isNew ? "Added" : changed ? "Edited" : "");
+  } else if (inp.kind === "filter") {
+    S.filter = viaEsc ? "" : inp.value.trim();
+    say(S.filter ? `Filter: ${S.filter} · Esc clears` : "");
+  } else if (inp.kind === "capture") {
+    const v = inp.value.trim(), clip = inp.clip;
+    if (viaEsc) { S.view = "closed"; if (v) S.toast = "Capture discarded"; return; }
+    // an empty field with a clipboard suggestion: the task comes from the link
+    const title = v || (clip ? clip.task : "");
+    if (!title) { S.view = inp.toList ? "list" : "closed"; return; }
+    let nt; mutate(() => { nt = item(title, S.captureDue, clip ? { links: [clip.url] } : {}); S.items.push(nt); });
+    if (clip) spendClip();
+    // Return saves and closes; the list hotkey (here ctrl+Return) saves and opens the list on it
+    if (!inp.toList) { S.view = "closed"; S.toast = `Saved: ${title}${clip ? " + link" : ""} (${dueLabel(S.captureDue) || "no date"})`; }
+    else { S.view = "list"; S.col = colOfGroup(groupOfDue(S.captureDue)); setFocus({ id: nt.id, g: groupOfDue(S.captureDue) }); say("Saved"); }
+  } else if (inp.kind === "link") {
+    // inside the f menu: an empty field takes the clipboard link, if one is offered;
+    // then the menu shows again, on the new link
+    const url = inp.value.trim() || (inp.clip ? inp.clip.url : ""), t = byId(inp.id);
+    if (url && t) mutate(() => t.links.push(url), `Link added: ${linkLabel(url)}`);
+    if (url && t && !inp.value.trim() && inp.clip) spendClip();
+    const msg = S.msg; S.focus = inp.id;
+    if (inp.sheet) openSheet("links", { link: url ? linksOf(t).findIndex(l => l.url === url && l.id === t.id) : 0 });
+    else followLink(url ? t.links.length - 1 : 0);
+    if (url) S.msg = msg;
+  }
+}
+function openOverlay(kind) {
+  S.toast = ""; S.msg = ""; S.pending = "";
+  if (kind === "capture") {
+    S.view = "capture"; S.mode = "insert"; S.captureDue = TODAY;
+    // a link on the clipboard that hasn't been offered yet becomes the placeholder
+    S.input = { kind: "capture", value: "", clip: freshClip() };
+    say("Return saves · ⌃Return saves and opens the list · Esc discards");
+  }
+  else { S.view = "list"; S.mode = "normal"; }
+}
+function closeOverlay() { S.view = "closed"; S.mode = "normal"; S.input = null; S.menu = null; S.pending = ""; }
+
+// ---------- moving around
+function move(d) {
+  const list = nav(); if (!list.length) return;
+  const i = Math.max(0, focusIndex(list));
+  setFocus(list[Math.min(list.length - 1, Math.max(0, i + d))]);
+}
+function goCol(i) {
+  if (i < 0 || i > lastCol()) return say(i < 0 ? "Already in Done" : "Already in the last column");
+  if (i !== S.col) {
+    S.colFocus[S.col] = { id: S.focus, g: S.fg };
+    S.col = i;
+    const m = S.colFocus[i], list = nav();
+    setFocus((m && list.find(r => sameRow(r, m.id, m.g))) || list[0]);
+  }
+  say("");
+}
+// Return on a "+N" line: show those subtasks in place, until the focus leaves the task
+function openMore(r) {
+  S.expanded = { id: r.more.t.id, g: r.g };
+  const first = r.more.open[0] || r.more.done[0];
+  if (first) setFocus({ id: first.id, g: r.g });
+  say("Subtasks from other days and done ones · hidden again once you leave the task");
+}
+
+// ---------- H J K L: move the marked tasks (or the focused one); the view follows.
+// H L: a column earlier / later. J K: down / up in the order; at a group's edge
+// (in Upcoming) across the heading, which changes the date. Each press is one undo step.
+// into column i: the date of its first group that has one; into Done: done
+function carryTo(ts, i) {
+  if (i === 0) return toggleDone(ts.filter(isOpen));
+  if (i < 0) return say("Already in Done");
+  const C = cols(), dir = i < S.col ? -1 : 1;
+  for (; i > 0 && i <= lastCol(); i += dir) {
+    const g = C[i].groups.find(g => GROUPS[g].date() !== undefined);
+    if (g) { mutate(() => dateTasks(ts, GROUPS[g].date()), `→ ${C[i].label}${ts.length > 1 ? ` · ${plural(ts.length, "task")}` : ""}`); S.col = i; S.fg = g; return; }
+  }
+  say("Already in the last column");
+}
+// across the group headings of a multi-group column (Upcoming). ts are tasks;
+// orig the targets, whose top-level items land at the near end of the new group.
+function carryGroup(orig, ts, dir) {
+  const groups = cols()[S.col].groups, from = groups.indexOf(S.fg);
+  for (let i = from + dir; i >= 0 && i < groups.length; i += dir) {
+    const d = GROUPS[groups[i]].date(); if (d === undefined) continue;
+    mutate(() => {
+      dateTasks(ts, d);
+      // land at the near end of the new group: the top going down, the bottom going up
+      const tops_ = orig.filter(t => !t.parent), ids = new Set(tops_.map(t => t.id)), moving = S.items.filter(x => ids.has(x.id));
+      const there = columnContent(S.col).find(gr => gr.g === groups[i]).blocks.map(b => b.t).filter(t => !ids.has(t.id));
+      if (!there.length || !tops_.length || tops_.length !== orig.length) return;
+      S.items = S.items.filter(x => !ids.has(x.id));
+      const at = dir > 0 ? S.items.indexOf(there[0]) : S.items.indexOf(there[there.length - 1]) + 1;
+      S.items.splice(at, 0, ...moving);
+    }, `→ ${GROUPS[groups[i]].label}`);
+    S.fg = groups[i]; return true;
+  }
+  return false;
+}
+// up or down among its siblings in the group: the manual order
+function reorder(t, dir) {
+  const sib = nav().filter(r => r.t && r.g === S.fg && r.t.parent === t.parent).map(r => r.t);
+  const nb = sib[sib.indexOf(t) + dir];
+  if (!nb) return false;
+  if (nb.status !== t.status) { say("Done items stay below"); return true; }
+  mutate(() => { S.items.splice(S.items.indexOf(t), 1); S.items.splice(S.items.indexOf(nb) + (dir > 0 ? 1 : 0), 0, t); });
+  return true;
+}
+// the focus goes along with the (first) moved item: a group's heading, else the task
+function follow(ts) {
+  const ids = ts.map(t => t.id), list = nav();
+  const r = list.find(x => ids.includes(x.id) && x.g === S.fg) || list.find(x => ids.includes(x.id));
+  if (r) setFocus(r);
+}
+function moveSide(dir) {
+  const orig = targets(), ts = tasksOf(orig); if (!ts.length) return say("Nothing to move here");
+  carryTo(ts, S.col + dir);
+  follow([...orig, ...ts]);
+}
+function moveUpDown(dir) {
+  const orig = targets(); if (!orig.length) return say("Nothing to move here");
+  if (orig.length === 1) {
+    // a single marked item: work from where it shows in this column
+    const list = nav(), r = list.find(x => x.id === orig[0].id && x.g === S.fg) || list.find(x => x.id === orig[0].id);
+    if (!r) return say("The marked task is in another column");
+    setFocus(r);
+  }
+  const multiGroup = cols()[S.col].groups.length > 1;
+  if (orig.length === 1 && reorder(orig[0], dir)) {}
+  else if (multiGroup) { if (!carryGroup(orig, tasksOf(orig), dir)) say(dir > 0 ? "Already in the last group" : "Already in the first group"); }
+  else say(orig.length > 1 ? "order: one task at a time" : dir > 0 ? "Already at the bottom" : "Already at the top");
+  follow(orig);
+}
+
+// ---------- keys
+function onKey(e) {
+  const k = e.key, ctrl = e.ctrlKey;
+  if (e.metaKey || e.altKey) return;
+  if (["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(k)) return;
+  if (S.view === "closed") {
+    if (k === "Enter") { e.preventDefault(); openOverlay("list"); }
+    else if (k === "c") { e.preventDefault(); openOverlay("capture"); }
+    return render();
+  }
+  e.preventDefault();
+  S.toast = "";
+  if (S.pend && S.mode === "normal") {
+    if (k === "Tab") { pendStep(e.shiftKey ? -1 : 1); return render(); }
+    if (k === "Escape") { pendCancel(); return render(); }
+    // any other key sends it first. j / k: the task's row went away and the focus
+    // already moved to the next row (j) or goes to the one before (k): that is the move
+    const p = S.pend, wasHere = S.focus === p.row.id && S.fg === p.row.g, old = S.navKeys;
+    pendCommit();
+    if (k === "Enter") return render();   // Return just sends; it doesn't also open the next task's menu
+    const gone = wasHere && !nav().some(r => sameRow(r, p.row.id, p.row.g));
+    if (gone && (k === "j" || k === "ArrowDown")) return render();
+    if (gone && (k === "k" || k === "ArrowUp")) {
+      const j = old.findIndex(r => sameRow(r, p.row.id, p.row.g)), list = nav();
+      const prev = old.slice(0, Math.max(0, j)).reverse().map(r => list.find(x => sameRow(x, r.id, r.g))).find(Boolean);
+      if (prev) setFocus(prev);
+      return render();
+    }
+  }
+  if (S.mode === "menu") { menuKey(e.shiftKey && /^Digit\d$/.test(e.code || "") ? "⇧" + e.code.slice(5) : k, e.shiftKey); return render(); }
+  if (S.pending) {
+    const sq = S.pending + k; S.pending = "";
+    if (sq === "gg") { const l = nav(); if (l.length) setFocus(l[0]); }
+    else if (sq === "gx") sheetOn() ? openSheet("links", { only: true }) : followLink();
+    else if (sq === "dd") remove(cols()[S.col].done ? targets().flatMap(t => isGroup(t) && !groupDone(t) ? kids(t.id).filter(k => !isOpen(k)) : [t]) : targets());
+    else if (sq === "cc") { const t = byId(S.focus); if (t) startInsert(t, "replace"); }
+    else if (sq === ">>") send(tasksOf(targets()), 1);
+    else if (sq === "<<") send(tasksOf(targets()), -1);
+    else if (sq === "==") setDue(tasksOf(targets()), TODAY);
+    else say(`Unknown: ${sq}`);
+    return render();
+  }
+  const t = byId(S.focus), r = focusRow();
+  switch (true) {
+    case ctrl && k === "r": redo(); break;
+    case ctrl && (k === "a" || k === "x"): shift(tasksOf(targets()), k === "a" ? 1 : -1); break;
+    case ctrl && k === "Enter": break;
+    case k === "j" || k === "ArrowDown": move(1); break;
+    case k === "k" || k === "ArrowUp": move(-1); break;
+    case k === "G": { const l = nav(); if (l.length) setFocus(l[l.length - 1]); break; }
+    case k === "l" || k === "ArrowRight": goCol(S.col + 1); break;
+    case k === "h" || k === "ArrowLeft": goCol(S.col - 1); break;
+    case k === "M": goCol(1); break;
+    case k === "0": goCol(0); break;
+    case k === "$": goCol(lastCol()); break;
+    case ["g", "d", "c", ">", "<", "="].includes(k): S.pending = k; break;
+    case k === "Tab": if (pillMode()) pendStart(e.shiftKey ? -1 : 1); else send(tasksOf(targets()), e.shiftKey ? -1 : 1); break;
+    case k === "+" || k === "-": shift(tasksOf(targets()), k === "-" ? -1 : 1); break;
+    case k === ".": if (S.last) S.last(targets()); else say("Nothing to repeat"); break;
+    case k === " ": toggleMark(t); break;
+    case k === "x": toggleDone(tasksOf(targets())); break;
+    case k === "s" && sheetOn(): openSheet("time", { only: true }); break;
+    case k === "s": {
+      const ts = tasksOf(targets()).filter(x => !isGroup(x));
+      if (!ts.length) say("Nothing here to log time on"); else openMenu("time", ts.map(x => x.id), "log");
+      break;
+    }
+    case k === "t" && sheetOn(): openSheet("due", { only: true }); break;
+    case k === "t": openMenu("due", tasksOf(targets()).map(x => x.id)); break;
+    case k === "f": sheetOn() ? openSheet("links", { only: true }) : followLink(); break;
+    case k === "u": undo(); break;
+    case k === "H" || k === "L": moveSide(k === "L" ? 1 : -1); break;
+    case k === "J" || k === "K": moveUpDown(k === "J" ? 1 : -1); break;
+    case k === "o" || k === "O": newItem(t, r, k === "o"); break;
+    case k === "i" || k === "A": if (t) startInsert(t, k === "i" ? "start" : "end"); break;
+    case k === "Enter":
+      if (r && r.more) openMore(r); else if (sheetOn()) openSheet("links"); else followLink();
+      break;
+    case k === "/": S.mode = "filter"; S.input = { kind: "filter", value: S.filter }; break;
+    case k === "Escape":
+      if (S.filter) { S.filter = ""; say("Filter cleared"); }
+      else if (S.marks.size) { S.marks.clear(); say("Marks cleared"); }
+      else closeOverlay();
+      break;
+    default: if (k.length === 1) say(`${k}: not mapped`);
+  }
+  render();
+}
+// o: a new task in a group. On a task of its own, it first becomes a group of
+// two: the group takes its title and it stays inside as the first task. On a
+// group's heading, task or "+N" line: a new task in that group, below the focus.
+// O: a new task of its own above the focused item (above its group). The new
+// task gets the date of the time group it is created in; left empty, it is
+// discarded and everything goes back as it was (one undo step).
+function newItem(t, r, inGroup) {
+  const c = cols()[S.col];
+  const g = c.done ? "now" : (r && r.g !== "done" ? r.g : c.groups[0]);
+  const d = GROUPS[g].date(), due = d === undefined ? TOMORROW : d;
+  const host = r && r.more ? r.more.t : t && isGroup(t) ? t : t && t.parent ? byId(t.parent) : null;
+  let nt, how = true;
+  mutate(() => {
+    if (!inGroup) {
+      nt = item("", due);
+      const top = t ? (t.parent ? byId(t.parent) : t) : null;
+      S.items.splice(top ? S.items.indexOf(top) : S.items.length, 0, nt);
+    } else if (host) {
+      nt = item("", due, { parent: host.id });
+      // below the focused task; on the heading: first; on "+N": last
+      const ks = kids(host.id), after = r && r.more ? ks[ks.length - 1] : t && t.parent ? t : null;
+      S.items.splice(after ? S.items.indexOf(after) + 1 : S.items.indexOf(host) + 1, 0, nt);
+    } else if (t) {
+      const gr = group(t.title);
+      S.items.splice(S.items.indexOf(t), 0, gr);
+      t.parent = gr.id; S.marks.delete(t.id);
+      nt = item("", due, { parent: gr.id });
+      S.items.splice(S.items.indexOf(t) + 1, 0, nt);
+      how = "convert";
+    } else {
+      nt = item("", due); S.items.push(nt);
+    }
+  });
+  if (c.done) S.col = 1;
+  setFocus({ id: nt.id, g });
+  startInsert(nt, "end", how);
+}
+
+// ---------- rendering
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = s => esc(s).replace(/\b([A-Z][A-Z0-9]+-\d+)\b/g, '<span class="jira">$1</span>');   // Jira keys as chips
+const isFocus = (r, live) => live && S.view === "list" && r.id === S.focus && r.g === S.fg;
+// The group the focus is in: a heading, or a task inside a group. Its cards in
+// the other places it shows are lit (kin).
+function focusGroup() {
+  const t = byId(S.focus); if (!t) return null;
+  if (isGroup(t)) return t.id;
+  const p = t.parent && byId(t.parent);
+  return p && isGroup(p) ? p.id : null;
+}
+// The other places (column or time group names) the focused group shows in.
+function groupElsewhere() {
+  const gid = focusGroup(); if (!gid) return [];
+  const out = [];
+  cols().forEach((c, i) => columnContent(i).forEach(gr => {
+    if (i === S.col && gr.g === S.fg) return;
+    if (gr.blocks.some(b => b.t.id === gid)) out.push(gr.label || c.label);
+  }));
+  return [...new Set(out)];
+}
+function rowHtml(r, live) {
+  const t = r.t, focus = isFocus(r, live), head = isGroup(t);
+  const editing = S.input && S.input.kind === "title" && S.input.id === t.id;
+  const marked = S.marks.has(t.id);
+  const pend = S.pend && (S.pend.head ? S.pend.head === t.id && r.g === S.pend.row.g : S.pend.ids.includes(t.id) && (S.pend.marked || r.g === S.pend.row.g));
+  const cls = ["row", head ? "head" : t.status, t.parent ? "sub" : "", focus ? "focus" : "", marked ? "marked" : "", r.other ? "other" : "", isAsking(t) ? "asking" : "", pend ? "pending" : ""].join(" ");
+  let meta;
+  if (head) {
+    // a group heading: progress and the time logged across its tasks, no date, no checkbox
+    const ks = kids(t.id), n = ks.filter(k => r.g !== "done" || !isOpen(k)).reduce((a, k) => a + (spentShown(k) || 0), 0);
+    meta = `${pend ? datePillHtml(t) : ""}<span class="prog">${ks.filter(k => !isOpen(k)).length}/${ks.length}</span>${n ? `<span class="spent">${spentLabel(n)}</span>` : ""}`;
+  } else {
+    const d = dueShown(t), sp = spentShown(t);
+    const due = d && r.g !== "done" ? `<span class="due ${d < TODAY && isOpen(t) ? "over" : d > TODAY && t.parent ? "later" : ""}">${dueLabel(d)}</span>` : "";
+    const spent = sp != null ? `<span class="spent">${spentLabel(sp)}</span>` : "";
+    const links = t.links.length ? `<span title="links">↗${t.links.length > 1 ? t.links.length : ""}</span>` : "";
+    meta = `${links}${spent}${pend ? datePillHtml(t) : due}`;   // pending: the pill stands in for the date
+  }
+  const title = editing ? fieldHtml(head ? "Group name" : t.parent ? "New task in the group" : "New open point") : fmt(t.title || "");
+  const mark = head ? (marked && S.set.marks === "dot" ? "●" : "") : !isOpen(t) ? "✓" : marked && S.set.marks === "dot" ? "●" : S.set.marks === "lift" ? "" : "○";  // lifted: open tasks need no glyph
+  return `<div class="${cls}" data-id="${t.id}" data-g="${r.g}"><div class="mark">${mark}</div><div class="ttl">${title}</div><div class="meta">${meta}</div></div>`;
+}
+// Tab's date pill: where the task will go; with the timer, a bar drains inside it
+// (a negative delay keeps it in step across re-renders)
+function datePillHtml(t) {
+  // a task shows where IT goes (marked tasks can start from different days); a heading, its tasks' target
+  const to = t && !isGroup(t) ? targetOf(t, S.pend.steps) : pendTarget(); if (!to) return "";
+  const bar = S.set.tab === "timer" ? `<i class="pbar" style="animation-delay:-${Math.min(PEND_MS, Date.now() - S.pend.started)}ms"></i>` : "";
+  // short, so the title keeps its room: the day ("→ tomorrow", "→ Fri", "→ Mon 23 Nov") or "→ no date"
+  return `<span class="pill date" title="${esc(GROUPS[to.g].label)}">→ ${esc(to.d ? dueLabel(to.d) : "no date")}${bar}</span>`;
+}
+// the "+N" line: what is elsewhere, seen from this group, e.g. "→ 2 later · ✓ 1 done"
+// (↗ is kept for links; ○ ✓ for tasks; ● for marks)
+function moreHtml(r, live) {
+  const { open, done } = r.more, here = TIMELINE.indexOf(r.g), at = k => TIMELINE.indexOf(groupOfDue(k.due));
+  const later = open.every(k => at(k) > here), earlier = open.every(k => at(k) < here);
+  const parts = [open.length ? (r.g === "done" ? `→ ${open.length} open` : later ? `→ ${open.length} later` : earlier ? `← ${open.length} earlier` : `↔ ${open.length} on other days`) : "", done.length ? `✓ ${done.length} done` : ""].filter(Boolean);
+  return `<div class="row sub more ${isFocus(r, live) ? "focus" : ""}" data-id="${r.id}" data-g="${r.g}"><div class="mark">+</div><div class="ttl">${parts.join(" · ")}</div></div>`;
+}
+// A group and its tasks (or a task on its own) form one block. Focus on the
+// heading lights the whole block; on a task inside, the block turns quiet and the
+// task gets the focus. An open menu sits inline: below the focused task, or below
+// the whole block when the heading has the focus.
+function blockHtml(b, live) {
+  const rows = rowsOf(b);
+  const onMain = isFocus(rows[0], live), onKid = rows.slice(1).some(r => isFocus(r, live));
+  const kin = !onMain && !onKid && S.view === "list" && isGroup(b.t) && b.t.id === focusGroup();
+  // a group card is lifted when all the tasks it shows here are marked
+  const here = b.kids.filter(k => !k.other).map(k => k.t.id);
+  const lifted = isGroup(b.t) ? here.length > 0 && here.every(id => S.marks.has(id)) : S.marks.has(b.t.id);
+  const cls = ["block", onMain ? "focus" : onKid ? "ctx" : "", kin ? "kin" : "", lifted ? "marked" : "", isGroup(b.t) ? "grp" : ""].join(" ");
+  const menu = live && S.menu ? menuHtml() : "";
+  const body = rows.map((r, i) => (r.more ? moreHtml(r, live) : rowHtml(r, live)) + (menu && i > 0 && isFocus(r, live) ? menu : "")).join("");
+  return `<div class="${cls}" data-block="${b.g}|${b.t.id}">${body}${menu && onMain ? menu : ""}</div>`;
+}
+function paneHtml(i, cur) {
+  const c = cols()[i], content = columnContent(i);
+  const n = new Set(content.flatMap(gr => gr.blocks.map(b => b.t.id))).size;
+  const body = content.map(gr =>
+    (gr.label ? `<div class="group" data-block="h|${gr.g}">${gr.label}<span class="n">${gr.blocks.length}</span></div>` : "") +
+    (gr.blocks.length ? gr.blocks.map(b => blockHtml(b, cur)).join("") : gr.label ? `<div class="gempty">—</div>` : `<div class="empty">Empty</div>`)).join("");
+  // a menu with nothing focused here (marks elsewhere, an empty column) opens at the top
+  const lone = cur && S.menu && !content.some(gr => gr.blocks.some(b => rowsOf(b).some(r => isFocus(r, true)))) ? menuHtml() : "";
+  return `<div class="pane ${cur ? "cur" : ""}" data-k="${i}"><div class="colhead">${c.label}<span class="n">${n}</span></div><div class="panebody">${lone}${body}</div></div>`;
+}
+// Sliding layouts: previous column | focused column | the later ones (stacked: all
+// of them; Done | Now | Upcoming: the next). Fixed: Done | Now | Upcoming stay put
+// and only the focus moves.
+function boardHtml() {
+  const c = S.col, last = lastCol(), dots = cols().map((_, i) => i === c ? "<b>◆</b>" : "·").join(" ");
+  let slots;
+  if (S.set.moving === "fixed") slots = cols().map((_, i) => `<div class="slot ${i === c ? "mid" : ""}">${paneHtml(i, i === c)}</div>`).join("");
+  else {
+    const later = S.set.moving === "stack" ? Array.from({ length: last - c }, (_, n) => c + 1 + n) : c < last ? [c + 1] : [];
+    slots = (c > 0 ? `<div class="slot">${paneHtml(c - 1, false)}</div>` : `<div class="slot void"></div>`) +
+      `<div class="slot mid">${paneHtml(c, true)}</div>` +
+      `<div class="slot ${later.length ? "" : "void"}">${later.map(i => paneHtml(i, false)).join("")}</div>`;
+  }
+  const top = topHtml();
+  return `<div class="board ${S.set.chrome} mk-${S.set.marks}">${slots}</div>` +
+    (top ? `<div class="cbar ctop glass"><div class="top">${top}</div></div>` : "") +
+    `<div class="cbar cstatus glass">${stripHtml()}<div class="status">${statusHtml()}<span class="dots">${dots}</span></div></div>`;
+}
+// The detail strip: the focused task's links and time (a heading: the group's
+// progress), in a fixed-height line above the status line.
+function stripHtml() {
+  const t = byId(S.focus);
+  if (isGroup(t)) {
+    const ks = kids(t.id), n = ks.reduce((a, k) => a + (spentShown(k) || 0), 0);
+    return `<div class="dstrip"><span class="dn">Group · ${ks.filter(k => !isOpen(k)).length} of ${plural(ks.length, "task")} done</span>${alsoHtml()}${n ? `<span class="ds">${spentLabel(n)} logged</span>` : ""}</div>`;
+  }
+  if (!t) return `<div class="dstrip"><span class="dn none">${isMore(S.focus) ? "Return shows these tasks here" : ""}</span></div>`;
+  const lk = t.links.length ? `<span class="dl">↗ ${t.links.length > 1 ? t.links.length + " · " : ""}${esc(linkLabel(t.links[0]))}<b>f</b></span>` : "";
+  const spv = spentShown(t), sp = spv != null ? `<span class="ds">${spentLabel(spv)} logged</span>` : "";
+  return `<div class="dstrip">${lk}${alsoHtml()}${sp}</div>`;
+}
+const alsoHtml = () => { const a = groupElsewhere(); return a.length ? `<span class="da">also: ${esc(a.join(", "))}</span>` : ""; };
+function sheetHtml() {
+  const m = S.menu, adding = !!(S.input && S.input.kind === "link");
+  const nd = m.due.length, nt = m.time.length;
+  const head = m.run ? runHead(m) : m.then === "done" ? "Done · time spent" : nd > 1 ? `${nd} tasks` : "";
+  const name = { due: "Due", time: "Time", links: "Links" };
+  const rows = m.rows.map((row, ri) => {
+    const on = ri === m.row && !adding, cur = row === "links" ? undefined : sheetCur(row);
+    const opts = sheetOpts(row);
+    let body = opts.map((o, i) => {
+      if (o[1] === "add" && adding) return "";
+      const sel = on && i === m.idx[row], val = row !== "links" && i === m.idx[row];
+      const isCur = row !== "links" && cur !== undefined && (row === "due" || cur != null) && o[1] === cur;
+      const key = row === "time" ? String(i) : row === "due" ? o[2] : "";
+      return `<span class="so ${sel ? "sel" : ""} ${val ? "val" : ""} ${isCur ? "cur" : ""} ${o[1] === "add" ? "add" : ""}">${row === "links" && o[1] !== "add" ? "↗ " : ""}${esc(o[0])}${key ? `<kbd>${key}</kbd>` : ""}</span>`;
+    }).join("");
+    if (row === "links" && !m.links.length && !adding && isGroup(byId(m.linkHost))) body = `<span class="so none">No links in this group</span>` + body;
+    if (row === "links" && adding) body += `<span class="mi add">${pillHtml(S.input.clip)}${fieldHtml(S.input.clip ? S.input.clip.title ? `${S.input.clip.label}: ${S.input.clip.title}` : S.input.clip.ph || S.input.clip.label : "Paste a URL or ticket")}</span>`;
+    if (row === "time" && !nt) body = `<span class="so none">Nothing open here</span>`;
+    if (row === "time" && nt > 1 && !m.run && m.then !== "done") body = `<span class="so none">${nt} tasks · s logs them one by one</span>`;
+    return `<div class="srow ${on ? "on" : ""}"><span class="sl">${name[row]}</span><span class="sopts">${body}</span></div>`;
+  }).join("");
+  return `<div class="menu ${S.view === "list" ? "inline" : "glass"} sheet" data-block="menu">${head ? `<div class="mh">${head}</div>` : ""}${rows}</div>`;
+}
+// "Done · 2/3 · Ask Lea for a slot"
+const runHead = m => `${m.run.then === "done" ? "Done" : "Time"} · ${m.run.i + 1}/${m.run.n} · ${esc((runCur() || {}).title || "")}`;
+function menuHtml() {
+  if (!S.menu) return "";
+  if (S.menu.type === "sheet") return sheetHtml();
+  const n = S.menu.ids.length, m = S.menu, adding = !!(S.input && S.input.kind === "link");
+  const head = m.run ? runHead(m) : m.type === "due" ? "Due" : m.type === "links" ? "Links" : m.then === "done" ? "Done · time spent" : "Time spent";
+  const many = n > 1 && !m.run ? ` · ${n} tasks` : "";
+  return `<div class="menu ${S.view === "list" ? "inline" : "glass"}" data-block="menu"><div class="mh">${head}${many}</div>` +
+    menuOpts().map((o, i) => adding && o[1] === "add" ? "" : `<div class="mi ${o[1] === "add" ? "addopt" : ""} ${i === S.menu.index && !adding ? "on" : ""}">${o[0]}<span>${S.menu.type === "due" && o[1] ? dueLabel(o[1]) + " · " : ""}${o[2] ? `<kbd>${o[2]}</kbd>` : m.type === "time" ? `<kbd>${i}</kbd>` : i + 1}</span></div>`).join("") +
+    (m.type === "links" && !m.links.length && !adding && isGroup(byId(m.ids[0])) ? `<div class="mi none">No links in this group</div>` : "") +
+    (adding ? `<div class="mi add">${pillHtml(S.input.clip)}${fieldHtml(S.input.clip ? S.input.clip.title ? `${S.input.clip.label}: ${S.input.clip.title}` : S.input.clip.ph || S.input.clip.label : "Paste a URL or ticket")}</div>` : "") +
+    (m.type === "links" && !adding ? `<div class="mhint">Return opens · o or + add adds · x removes</div>` : "") + `</div>`;
+}
+function topHtml() {
+  if (S.view === "capture") { const c = S.input.clip; return `<span class="prompt">+</span>${pillHtml(c)}${fieldHtml(c ? c.ph || c.task : "New open point")}<span class="pill date" title="Tab later · ⇧Tab earlier">→ ${esc(dueLabel(S.captureDue) || "no date")}</span><span class="sub">${captureHint()}</span>`; }
+  if (S.input && S.input.kind === "filter") return `<span class="prompt">/</span>${fieldHtml("Filter")}`;
+  return S.filter ? `<span class="sub" style="margin-left:0">filter: ${esc(S.filter)} · Esc clears</span>` : "";
+}
+// A clipboard link that's attached: a pill at the start of the field. Typing
+// keeps it; Backspace on an empty field, or its ×, drops it.
+const pillHtml = c => c ? `<span class="pill" title="${esc(c.url)}">↗ ${esc(c.title ? c.label : "link from clipboard")}<b class="px" data-unpill title="Drop the link">×</b></span>` : "";
+const captureHint = () => `Tab${S.input && S.input.clip ? " · ⌫ drops the link" : ""}${S.input && S.input.normal ? " · Esc discards" : ""}`;
+// The one text field. In field normal mode (after one Esc) it is drawn as text
+// with a block caret on the character under the cursor; keys reach fieldKey
+// through the document listener, so nothing depends on the browser's selection.
+function fieldHtml(ph) {
+  const inp = S.input;
+  if (!inp.normal) return `<input id="inp" type="text" placeholder="${ph}" value="${esc(inp.value)}" autocomplete="off" spellcheck="false">`;
+  const v = inp.value, i = Math.min(inp.pos, Math.max(0, v.length - 1));
+  return `<span class="fnormal">${esc(v.slice(0, i))}<b class="bc">${v.length ? esc(v[i]) : "&nbsp;"}</b>${esc(v.slice(i + 1))}</span>`;
+}
+function statusHtml() {
+  const name = S.input && S.input.normal ? "FIELD" : { normal: "NORMAL", insert: "INSERT", menu: "MENU", filter: "FILTER" }[S.mode];
+  const today = S.items.filter(t => t.doneAt === TODAY && t.spent != null).reduce((n, t) => n + t.spent, 0);
+  const cnt = `${S.items.filter(t => !isGroup(t) && isOpen(t)).length} open · ${spentLabel(today) || "0m"} logged today`;
+  const nm = markedItems().length;
+  return `<span class="mode ${S.input && S.input.normal ? "field" : S.mode}">${name}</span>${S.pending ? `<span class="pend">${S.pending}</span>` : ""}${nm ? `<span class="pend">${S.set.marks === "dot" ? "● " : ""}${nm} marked</span>` : ""}<span class="msg">${esc(S.msg || "")}</span><span class="count">${cnt}</span>`;
+}
+
+function render() {
+  const host = document.getElementById("panelHost");
+  const before = measure(host);
+  const toast = S.toast ? `<div class="toast">${esc(S.toast)}</div>` : "";
+  if (S.view === "closed") {
+    host.innerHTML = `${toast}<div class="closed-hint"><span class="hintchip" data-open="list">Return · open list (caps+Return)</span><span class="hintchip" data-open="capture">c · quick capture</span></div>`;
+  } else if (S.view === "list") {
+    if (!(S.input && S.input.kind === "title")) { collapseExpanded(); ensureFocus(); }
+    S.navKeys = nav().map(r => ({ id: r.id, g: r.g }));
+    host.innerHTML = boardHtml() + toast;
+    settle(host, before);
+  } else {
+    host.innerHTML = `<div class="panel glass"><div class="top">${topHtml()}</div><div class="status">${statusHtml()}</div></div>` + toast;
+  }
+  wireInput();
+  renderKeys();
+}
+
+// ---------- placement and motion
+const LINE = 0.46;  // the focus line, as a share of the stage height
+// Slide each column vertically so the focused row sits on the focus line; the
+// other columns line their first row up on it, and a stack moves as one. The
+// board is clipped between the bars, so rows never run under them.
+function place(host) {
+  const board = host.querySelector(".board"); if (!board) return;
+  const stage = board.offsetParent || host, H = stage.clientHeight;
+  const top = host.querySelector(".ctop"), foot = host.querySelector(".cstatus");
+  const t0 = top ? top.offsetTop + top.offsetHeight + 10 : 0;
+  board.style.top = `${t0}px`;
+  board.style.bottom = `${foot ? H - foot.offsetTop + 10 : 0}px`;
+  const br = board.getBoundingClientRect(), lineY = H * LINE - t0, fixed = S.set.moving === "fixed";
+  // how far to slide so this element's middle sits on the line; measured with
+  // rectangles: offsetTop would count from the nearest card, not the column
+  const tyFor = el => { const r = el.getBoundingClientRect(); return Math.round(lineY - (r.top - br.top + r.height / 2)); };
+  // where a column sat while anchored on a mark: kept after the marks go (Esc), so
+  // releasing a lifted task doesn't scroll its column back; forgotten once you
+  // focus that column or the view changes (another column in the middle)
+  const view = S.set.moving + ":" + S.col;
+  if (!S.markTy || S.markTy.view !== view) S.markTy = { view, ty: {} };
+  board.querySelectorAll(":scope > .slot:not(.void)").forEach(slot => {
+    const p = slot.children[0], i = +p.dataset.k, cur = p.classList.contains("cur");
+    slot.style.translate = "0 0";   // measure from the resting place
+    const first = p.querySelector(".row:not(.more)") || p.querySelector(".row, .gempty, .empty, .colhead");
+    // other columns centre their first marked task, so marks stay in view as they move
+    const marked = !cur && slot.querySelector(".block.marked, .row.marked");  // the slot: a stack holds several panes
+    const a = (cur && p.querySelector(".row.focus")) || marked || first;
+    let ty = tyFor(a);
+    // stay where it was, but never so far that no row is on the line
+    const rows = slot.querySelectorAll(".row"), lastRow = rows[rows.length - 1] || first;
+    const clamp = v => Math.max(tyFor(lastRow), Math.min(tyFor(first), v));
+    if (cur) delete S.markTy.ty[i];
+    else if (marked) S.markTy.ty[i] = ty;
+    else if (S.markTy.ty[i] != null) ty = clamp(S.markTy.ty[i]);
+    else if (fixed && S.colTy[i] != null) ty = clamp(S.colTy[i]);
+    if (fixed && cur) S.colTy[i] = ty;
+    slot.style.translate = `0 ${ty}px`;
+  });
+}
+// FLIP: measure slots, panes, blocks and rows before a render, then play each
+// from where it was. One duration and easing for all, so a row's own offset
+// composes with its block's and its slot's into one straight path.
+const MOTION = { off: 0, normal: 300, slow: 600 };
+const EASE = "cubic-bezier(.22,.8,.24,1)";
+const keyOf = el => {
+  const p = el.closest("[data-k]"), k = p ? p.dataset.k : "";
+  return el.dataset.k != null ? "p" + el.dataset.k : el.dataset.block != null ? k + ":b:" + el.dataset.block : k + ":" + el.dataset.g + "|" + el.dataset.id;   // b: a block and its heading row share "g|id"
+};
+// the same item in another pane or group (a task moved by v, a group heading)
+const plainKey = el => el.dataset.block ? (el.matches(".group") ? "h:" : "b:") + el.dataset.block.split("|").pop() : "r:" + el.dataset.id;
+const FLIP = ".pane[data-k], [data-block], .row[data-id]";
+function measure(host) {
+  const m = { at: {}, plain: {}, board: !!host.querySelector(".board"), top: !!host.querySelector(".ctop") };
+  host.querySelectorAll(FLIP).forEach(el => {
+    const r = el.getBoundingClientRect(), v = { left: r.left, top: r.top, height: r.height };
+    if (el.matches(".pane")) { const h = el.querySelector(".colhead"); v.bg = getComputedStyle(el).backgroundColor; v.op = h ? getComputedStyle(h).opacity : "1"; }
+    else if (el.matches("[data-block]")) { const cs = getComputedStyle(el); v.op = cs.opacity; v.bc = cs.borderColor; v.bgc = cs.backgroundColor; }
+    m.at[keyOf(el)] = v; if (!el.matches(".pane")) m.plain[plainKey(el)] = v;
+  });
+  return m;
+}
+function settle(host, before) {
+  place(host);
+  const d = MOTION[S.set.motion] || 0, board = host.querySelector(".board");
+  if (!d || !board) return;
+  const opts = { duration: d, easing: EASE }, fadeIn = el => el.animate([{ opacity: 0 }, { opacity: 1 }], opts);
+  if (!before.board) return board.animate([{ opacity: 0, scale: 0.98 }, { opacity: 1, scale: 1 }], opts);
+  const top = host.querySelector(".ctop");
+  if (top && !before.top) top.animate([{ opacity: 0, translate: "0 -6px" }, { opacity: 1, translate: "0 0" }], opts);
+  // all end positions first: starting an animation would move what is measured next
+  const els = [...host.querySelectorAll(FLIP)].map(el => ({ el, key: keyOf(el), at: el.getBoundingClientRect() }));
+  const moved = new Map();   // element -> how far it travels on screen; null: it is new
+  els.forEach(({ el, key, at }) => {
+    const pane = el.matches(".pane");
+    const o = before.at[key] || (!pane && before.plain[plainKey(el)]);
+    const parent = pane ? null : el.parentElement.closest(".block[data-block], .pane[data-k]");
+    const pm = parent ? moved.get(parent) : [0, 0];
+    if (!o) { moved.set(el, null); if (pm) fadeIn(el); return; }
+    moved.set(el, [o.left - at.left, o.top - at.top]);
+    if (!pm) return;   // its container is new and fades in; it goes along
+    // relative to its container, which is animating too
+    const dx = o.left - at.left - pm[0], dy = o.top - at.top - pm[1];
+    if (pane) {
+      if (!el.querySelector(".menu")) el.style.overflow = "clip";
+      const an = el.animate([{ translate: `${dx}px ${dy}px`, backgroundColor: o.bg, height: `${o.height}px` },
+                             { translate: "0 0", backgroundColor: getComputedStyle(el).backgroundColor, height: `${at.height}px` }], opts);
+      an.onfinish = an.oncancel = () => { el.style.overflow = ""; };
+      el.querySelectorAll(":scope > .colhead").forEach(x => {
+        const op = getComputedStyle(x).opacity; if (op !== o.op) x.animate([{ opacity: o.op }, { opacity: op }], opts);
+      });
+    } else {
+      // a block: slide, and cross-fade its strength and colour (column fade, lit group)
+      const from = { translate: `${dx}px ${dy}px` }, to = { translate: "0 0" };
+      if (o.op != null) {
+        const cs = getComputedStyle(el);
+        if (cs.opacity !== o.op) { from.opacity = o.op; to.opacity = cs.opacity; }
+        if (cs.borderColor !== o.bc) { from.borderColor = o.bc; to.borderColor = cs.borderColor; }
+        if (cs.backgroundColor !== o.bgc) { from.backgroundColor = o.bgc; to.backgroundColor = cs.backgroundColor; }
+      }
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5 || Object.keys(from).length > 1) el.animate([from, to], opts);
+    }
+  });
+}
+
+function wireInput() {
+  const el = document.getElementById("inp");
+  if (!el || !S.input) { if (document.activeElement && document.activeElement.id === "inp") document.activeElement.blur(); return; }
+  el.focus();
+  const inp = S.input;
+  const caret = inp.pos != null ? inp.pos : inp.caret === "start" ? 0 : el.value.length;
+  if (inp.normal) el.setSelectionRange(caret, Math.min(caret + 1, el.value.length)); else el.setSelectionRange(caret, caret);
+  el.addEventListener("input", () => {
+    S.input.value = el.value;
+    if (S.input.kind !== "filter") return;
+    // live filter: redraw the columns and the bottom bar, keep the input
+    S.filter = el.value.trim(); ensureFocus(); S.navKeys = nav().map(r => ({ id: r.id, g: r.g }));
+    const host = document.getElementById("panelHost"), before = measure(host), tmp = document.createElement("div");
+    tmp.innerHTML = boardHtml();
+    host.querySelector(".board").replaceWith(tmp.querySelector(".board"));
+    host.querySelector(".cstatus").replaceWith(tmp.querySelector(".cstatus"));
+    settle(host, before);
+  });
+  el.addEventListener("keydown", e => { e.stopPropagation(); if (fieldKey(e, el)) render(); });
+}
+// Keys in a text field, vim's way (like a shell's vi mode). Typing is plain text;
+// the first Esc switches to normal mode inside the field (h l move, i a type
+// again), the second leaves and saves. Return saves from either. Capture is a
+// throwaway field, so there Esc Esc discards. On an empty field Esc leaves at
+// once. Returns true when it needs a render.
+function fieldKey(e, el) {
+  const inp = S.input, k = e.key;
+  if (k === "Tab" && inp.kind === "capture") {
+    e.preventDefault(); const opts = [TODAY, TOMORROW, EOW, NEXT_MON, null];
+    S.captureDue = opts[(opts.indexOf(S.captureDue) + (e.shiftKey ? opts.length - 1 : 1)) % opts.length];
+    return true;
+  }
+  if (k === "Backspace" && !inp.normal && inp.clip && !el.value) { e.preventDefault(); inp.clip = null; spendClip(); say("Clipboard link dropped"); return true; }
+  if (k === "Enter") {
+    e.preventDefault(); inp.value = el.value;
+    if (inp.kind === "capture") inp.toList = e.ctrlKey;
+    commitInput(false); return true;
+  }
+  if (k === "Escape") {
+    e.preventDefault(); inp.value = el.value;
+    // an empty field has nothing for normal mode to do: leave at once (a new task
+    // is discarded, a title stays as it was, the filter clears, capture and the
+    // add-link field are dropped, pill or not)
+    if (!inp.normal && !el.value.trim()) { inp.value = ""; inp.clip = null; commitInput(true); return true; }
+    if (!inp.normal) { inp.normal = true; inp.pos = Math.max(0, Math.min(el.selectionStart, el.value.length) - 1); say("h l move · i a type · Esc saves"); return true; }
+    commitInput(inp.kind === "capture"); return true;
+  }
+  if (!inp.normal) return false;
+  // field normal mode: nothing types, nothing reaches the board
+  if (k.length === 1 || k === "Backspace" || k === "Delete") e.preventDefault();
+  const max = Math.max(0, el.value.length - 1);
+  if (k === "h" || k === "ArrowLeft") inp.pos = Math.max(0, inp.pos - 1);
+  else if (k === "l" || k === "ArrowRight") inp.pos = Math.min(max, inp.pos + 1);
+  else if (k === "i") { inp.normal = false; say(""); }
+  else if (k === "a") { inp.normal = false; inp.pos = Math.min(el.value.length, inp.pos + 1); say(""); }
+  else { if (k.length === 1) say(`${k}: not mapped in the field · h l move · i a type · Esc saves`); return k.length === 1; }
+  return true;
+}
+
+// ---------- rail: switches and key reference
+function renderQs() {
+  document.getElementById("qs").innerHTML = QS.map((q, i) => `<div class="q ${S.railIdx === i ? "kfocus" : ""}"><div class="ql">${q.label}</div><div class="opts">${q.opts.map(([v, l]) =>
+    `<label><input type="radio" name="q-${q.key}" value="${v}" ${S.set[q.key] === v ? "checked" : ""}>${l}</label>`).join("")}</div></div>`).join("");
+  document.querySelector("#qs").closest(".card").classList.toggle("railmode", S.railIdx != null);
+  document.querySelectorAll("#qs input").forEach(r => r.addEventListener("change", () => { r.blur(); setOpt(r.name.slice(2), r.value); }));
+  const f = document.querySelector("#qs .q.kfocus"); if (f) f.scrollIntoView({ block: "nearest" });
+}
+function setOpt(key, v) {
+  if (S.pend) pendCommit();
+  if (S.mode !== "insert") { S.mode = "normal"; S.menu = null; S.pending = ""; }
+  const g = S.fg;
+  S.set[key] = v; S.expanded = null;
+  if (key === "moving") { S.colFocus = {}; S.colTy = {}; }
+  if (key === "clip") S.clipSeq++;
+  // stay in the same time group when the layout changes
+  if (key === "moving") { const c = g ? colOfGroup(g) : -1; S.col = c >= 0 ? c : Math.min(S.col, lastCol()); }
+  try { localStorage.setItem("todo-proto-set-20", JSON.stringify(S.set)); } catch (_) {}
+  renderQs(); render();
+}
+// , moves the keyboard to the switches: j k pick a question, h l change it, Esc or , back
+function railKey(e) {
+  const k = e.key, n = QS.length;
+  if (k === "j" || k === "ArrowDown") S.railIdx = (S.railIdx + 1) % n;
+  else if (k === "k" || k === "ArrowUp") S.railIdx = (S.railIdx + n - 1) % n;
+  else if (k === "h" || k === "l" || k === "ArrowLeft" || k === "ArrowRight") {
+    const q = QS[S.railIdx], i = q.opts.findIndex(o => o[0] === S.set[q.key]), d = k === "l" || k === "ArrowRight" ? 1 : -1;
+    return setOpt(q.key, q.opts[(i + d + q.opts.length) % q.opts.length][0]);
+  }
+  else if (k === "Escape" || k === ",") { S.railLast = S.railIdx; S.railIdx = null; try { localStorage.setItem("todo-proto-rail", String(S.railLast)); } catch (_) {} }
+  renderQs();
+}
+function renderKeys() {
+  const K = [
+    ["Move"], ["j k", "rows: headings, tasks, “+N” lines"], ["gg G", "top, bottom of the column"],
+    ["h l", S.set.moving === "stack" ? "previous / next column: Done, Now, Tomorrow, Rest of week, Later, No date" : "previous / next column: Done, Now, Upcoming"],
+    ["M", "back to Now"], ["0 $", "first column (Done) / last column"],
+    ["Return", "the links menu (as f) · on a “+N” line: show those tasks here"],
+    ["Mark"], ["Space", "mark / unmark (a heading: the whole group); marks stay while you move"],
+    ["Send (marked tasks, else the focused one); you stay put"],
+    [">> <<", "one step later / earlier: Done, Now, Tomorrow, Rest of week, Later, No date"], ["Tab ⇧Tab", S.set.tab === "send" ? "the same as >> <<" : `without marks: a date pill (→ tomorrow), Tab Tab steps it on, ⇧Tab back · the next key sends it${S.set.tab === "timer" ? ", or 1 s after the last Tab" : ""} · Esc cancels · with marks: as >> <<`],
+    ["t", "due menu, or straight away: tt today, tm tomorrow, tw end of week, tn next week, t- no date"],
+    ["==", "today"], ["+ -", "date one step later / earlier (also ^a ^x)"], [".", "repeat the last send"],
+    ["Act (marked tasks, else the focused one)"],
+    ["x", "done, asks the time spent · several (marks, a heading): one by one, Return each, ⇧Return all the rest, Esc stops · on done: reopen (in Done, a heading: its done tasks)"],
+    ["dd", "delete (a heading: the group with its tasks)"], ["s", "log time spent (per task)"],
+    ["Move (marked tasks, else the focused one); you go along"],
+    ["H L", "a column earlier / later (into Done: done · out of Done: reopened for today)"],
+    ["J K", S.set.moving !== "stack" ? "down / up in the order (one task); in Upcoming across the group headings, which changes the date" : "down / up in the order (one task at a time)"],
+    ["Edit"], ["o", "new task in the group (on a task of its own: makes it a group of two)"], ["O", "new task of its own, above"],
+    ["i A cc", "edit title (on a heading: the group's name)"], ["u ^r", "undo, redo"],
+    ["Links"], ["f gx Return", "the links menu below the task (also without links)"], ["Return / letter", "open the selected link / that link"], ["+ add  o", "add a link: select + add and Return, or o from anywhere in the menu (Return on empty: the clipboard link)"], ["x dd", "remove the selected link"],
+    ["Other"], ["/", "filter live"],
+    ["Esc", "clear the filter · clear marks · close"], [",", "keyboard to the switches (back where you left)"],
+    ...(sheetOn() ? [
+      ["The sheet (Menus: One sheet)"], ["Return", "open it below the task: Links, Due, Time (on Links)"], ["t s f", "only the Due / Time / Links row · s f again close it"],
+      ["j k", "row: Links, Due, Time (a single row grows to all three)"], ["h l", "Due / Time: change the value directly · Links: pick a link"], ["0–6", "the time: 0 none, 1 15m, 2 30m, 3 1h, 4 2h, 5 ½d, 6 1d"],
+      ["Esc Return", "close and keep (a new date sends the task) · u undoes the whole session"], ["Return", "on Links: open the selected link (+ add: add one)"],
+      ["t m w n -", "from any row: today, tomorrow, end of week, next week, no date (live; so t m = tomorrow)"], ["o x", "from any row: add a link · remove the selected one (dd too, on Links)"],
+      ["x", "the Time row only, a confirm: h l or 0–6 pick, Return marks done (0 skip: no time), Esc cancels"],
+      ["several", "x or s on marks / a heading: one task at a time · Return or a digit: this one · ⇧Return ⇧digit: all the rest · Esc stops (u undoes the run)"],
+    ] : [["Menus"], ["j k 1–9", "choose"], ["0–6", "time menu: 0 none/skip, 1 15m … 6 1d"], ["letters", "due menu: t m w n - · links: a s g …"], ["Return l", "set"], ["Esc h", "cancel"],
+      ["several", "x or s on marks / a heading: one task at a time · Return or a digit: this one · ⇧Return ⇧digit: all the rest · Esc stops (u undoes the run)"]]),
+    ["Text fields"], ["Esc (empty)", "leave at once: a new task is dropped, a title stays as it was"], ["Esc", "with text: normal mode in the field (h l move, i a type again)"], ["Esc Esc", "leave and save (capture: discard)"], ["Return", "save, from either mode"],
+    ["Capture"], ["Tab", "cycle due"], ["Return", "save and close (empty field + clipboard link: the placeholder becomes the task)"], ["⌃Return", "save and open the list on it (stands in for caps+Return)"], ["⌫", "on an empty field: drop the clipboard link (the pill)"], ["Esc", "discard (with text: Esc Esc)"],
+  ];
+  document.getElementById("keys").innerHTML = K.map(r => r.length === 1 ? `<div class="sec">${r[0]}</div>` : `<kbd>${esc(r[0])}</kbd><span>${esc(r[1])}</span>`).join("");
+}
+
+// ---------- desktop backdrop
+function renderDesk() {
+  const lines = [
+    "<b>func</b> handle(event: Event) {", "  guard let window = event.window <b>else</b> { return }", "  // daily: follow up with QA on ABC-398",
+    "  <b>let</b> frame = window.frame.insetBy(dx: 8, dy: 8)", "  cache.insert(window.id, at: .front)", "}", "",
+    "<b>struct</b> ExportJob {", "  <b>var</b> format: Format = .csv", "  <b>var</b> rows: [Row]", "  <b>var</b> limit = 50_000", "}", "",
+    "// TODO: ask Lea about XLSX limits", "<b>extension</b> ExportJob {", "  <b>func</b> run() <b>async throws</b> -> URL {",
+    "    <b>let</b> url = tmp.appending(path: name)", "    <b>try await</b> writer.write(rows, to: url)", "    <b>return</b> url", "  }", "}", "",
+    "webex  Marco: test env is down again, can you check?", "webex  Anna: did the VPN request go through?", "",
+  ];
+  document.getElementById("desk").innerHTML = (lines.join("\n") + "\n").repeat(3);
+}
+
+// ---------- boot
+try {
+  const s = JSON.parse(localStorage.getItem("todo-proto-set-20") || "null");
+  if (s) QS.forEach(q => { if (q.opts.some(o => o[0] === s[q.key])) S.set[q.key] = s[q.key]; });
+} catch (_) {}
+try { const r = parseInt(localStorage.getItem("todo-proto-rail"), 10); if (r >= 0 && r < QS.length) S.railLast = r; } catch (_) {}
+renderDesk(); renderQs(); render();
+document.addEventListener("keydown", e => {
+  const inRail = e.target.closest && e.target.closest(".rail");
+  if (e.metaKey || e.altKey || e.ctrlKey) { if (S.input && S.input.normal) { if (e.key === "Enter") { fieldKey(e, { value: S.input.value, selectionStart: S.input.pos }); render(); } return; } if (S.railIdx == null && !inRail) onKey(e); return; }
+  if (S.railIdx != null) { e.preventDefault(); return railKey(e); }
+  // field normal mode: the field is drawn as text, so its keys arrive here
+  if (S.input && S.input.normal) { const v = S.input.value; if (fieldKey(e, { value: v, selectionStart: S.input.pos })) render(); return; }
+  if (e.key === "," && e.target.id !== "inp" && !S.input) { e.preventDefault(); if (S.pend) { pendCommit(); render(); } S.railIdx = Math.min(S.railLast || 0, QS.length - 1); return renderQs(); }
+  if (inRail || e.target.id === "inp") return;
+  onKey(e);
+});
+try { document.getElementById("rmnote").hidden = !matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_) {}
+document.getElementById("panelHost").addEventListener("click", e => {
+  const h = e.target.closest("[data-open]"); if (h) { openOverlay(h.dataset.open); render(); return; }
+  if (e.target.closest("[data-unpill]") && S.input && S.input.clip) {
+    const el = document.getElementById("inp"); if (el) S.input.value = el.value;
+    S.input.clip = null; spendClip(); say("Clipboard link dropped"); render(); return;
+  }
+  if (S.pend) pendCommit();
+  const r = e.target.closest(".row[data-id]");
+  if (r && S.view === "list" && !S.input && S.mode === "normal" && nav().some(x => sameRow(x, r.dataset.id, r.dataset.g))) { setFocus({ id: r.dataset.id, g: r.dataset.g }); render(); }
+});
+document.getElementById("reset").addEventListener("click", e => {
+  S.items = sample(); S.undo = []; S.redo = []; S.filter = ""; S.marks = new Set(); S.expanded = null; S.col = 1; setFocus({ id: "t2", g: "now" }); S.msg = "Sample data reset"; e.target.blur(); render();
+});
+const scrim = document.getElementById("scrim");
+const syncFocus = () => { scrim.hidden = document.hasFocus(); };
+window.addEventListener("focus", syncFocus); window.addEventListener("blur", syncFocus);
+scrim.addEventListener("click", () => { window.focus(); scrim.hidden = true; });
+syncFocus();
+</script>
